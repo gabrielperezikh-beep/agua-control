@@ -298,7 +298,7 @@ with tab1:
                         if "Rerun" not in str(e): st.error(f"Error técnico: {e}")
 
 # ----------------------------------------
-# TAB 2: DIARIO
+# TAB 2: DIARIO (CORREGIDO)
 # ----------------------------------------
 with tab2:
     if st.button("🔄 Actualizar Tabla", use_container_width=True): st.cache_data.clear(); st.rerun()
@@ -309,12 +309,21 @@ with tab2:
         if not dia.empty:
             cstr = dia['Metodo_Pago'].astype(str)
             def suma(x): return dia[cstr.str.contains(x, case=False)]['Monto'].sum()
-            k1, k2 = st.columns(2); k1.metric("Pago Móvil", f"Bs {suma('Móvil|Movil'):,.0f}"); k2.metric("Efectivo", f"Bs {suma('Bs|Bolívares'):,.0f}")
+            
+            # --- AQUÍ ESTABA EL ERROR: AGREGAMOS LAS METRICAS FALTANTES ---
+            k1, k2 = st.columns(2)
+            k1.metric("Pago Móvil", f"Bs {suma('Móvil|Movil'):,.2f}")
+            k2.metric("Efectivo (Bs)", f"Bs {suma('Efectivo|Bs'):,.2f}")
+            
+            k3, k4 = st.columns(2)
+            k3.metric("Punto Venta", f"Bs {suma('Punto'):,.2f}")
+            k4.metric("Divisas ($)", f"$ {suma('Divisa|\$'):,.2f}")
+            
             st.dataframe(dia[['Hora','Detalles_Compra','Monto','Metodo_Pago']], hide_index=True, use_container_width=True)
         else: st.info("No hay ventas hoy.")
 
 # ----------------------------------------
-# TAB 3: CISTERNA (MEJORADO)
+# TAB 3: CISTERNA (HISTORIAL)
 # ----------------------------------------
 with tab3:
     st.markdown("### 🚛 Nueva Carga")
@@ -330,11 +339,10 @@ with tab3:
     st.markdown("### 📋 Historial de Cargas")
     df_cargas = pd.DataFrame(datos_cargas)
     if not df_cargas.empty:
-        # Ordenar por fecha (asumiendo formato YYYY-MM-DD o parseable)
         try:
             df_cargas['Fecha'] = pd.to_datetime(df_cargas['Fecha'])
             df_cargas = df_cargas.sort_values(by=['Fecha', 'Hora'], ascending=False)
-            df_cargas['Fecha'] = df_cargas['Fecha'].dt.date # Volver a formato fecha para mostrar bonito
+            df_cargas['Fecha'] = df_cargas['Fecha'].dt.date
         except: pass
         st.dataframe(df_cargas, hide_index=True, use_container_width=True)
     else:
@@ -354,12 +362,10 @@ with tab4:
     df_c = pd.DataFrame(datos_cargas)
     
     if not df_v.empty:
-        # 1. FILTRAR POR SEMANA
         df_v['Fecha'] = pd.to_datetime(df_v['Fecha']).dt.date
         mask = (df_v['Fecha'] >= inicio) & (df_v['Fecha'] <= fin)
         df_sem = df_v.loc[mask]
         
-        # Filtrar cargas semanales
         cargas_sem = 0
         if not df_c.empty:
             df_c['Fecha'] = pd.to_datetime(df_c['Fecha']).dt.date
@@ -367,11 +373,8 @@ with tab4:
             cargas_sem = len(df_c.loc[mask_c])
 
         if not df_sem.empty:
-            # 2. CALCULAR METRICAS FINANCIERAS
             st.divider()
             st.caption("💰 RESUMEN FINANCIERO")
-            
-            # Helper para sumar por método de pago (case insensitive)
             def sumar_metodo(df, keyword):
                 return df[df['Metodo_Pago'].astype(str).str.contains(keyword, case=False, na=False)]['Monto'].sum()
 
@@ -383,41 +386,31 @@ with tab4:
             k1, k2 = st.columns(2)
             k1.metric("📱 Pago Móvil", f"Bs {m_movil:,.2f}")
             k2.metric("💵 Efectivo (Bs)", f"Bs {m_efectivo:,.2f}")
-            
             k3, k4 = st.columns(2)
             k3.metric("💳 Punto Venta", f"Bs {m_punto:,.2f}")
             k4.metric("🇺🇸 Divisas ($)", f"$ {m_dolar:,.2f}")
 
-            # 3. CONTEO DE PRODUCTOS (PARSING)
             st.divider()
             st.caption("📦 BOTELLONES VENDIDOS")
-            
             conteo_productos = {}
-            # Recorremos cada venta para contar "2x Botellon", "1x 5L", etc.
             for items_str in df_sem['Detalles_Compra']:
                 if pd.isna(items_str): continue
-                # Separamos por coma (ej: "2x Botellon, 1x 5L")
                 lista_items = str(items_str).split(", ")
                 for item in lista_items:
                     try:
-                        # Buscamos separar cantidad y nombre (ej: "2x Botellon")
                         if "x " in item:
                             qty_str, nombre = item.split("x ", 1)
-                            # Ignoramos si es un texto de abono o saldo
                             if "ABONO" in nombre or "SALDO" in nombre or "Complemento" in nombre: continue
-                            
                             nombre = nombre.strip()
                             conteo_productos[nombre] = conteo_productos.get(nombre, 0) + int(qty_str)
                     except: pass
             
-            # Mostrar conteo
             if conteo_productos:
                 for prod, cant in conteo_productos.items():
                     st.write(f"**{prod}:** {cant} unidades")
             else:
                 st.caption("No se detectaron productos estándar.")
 
-            # 4. LITROS Y CISTERNAS
             st.divider()
             c_litros, c_cargas = st.columns(2)
             c_litros.metric("💧 Litros Vendidos", f"{df_sem['Total_Litros'].sum():,.0f} L")
