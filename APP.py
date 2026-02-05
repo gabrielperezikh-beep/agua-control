@@ -72,6 +72,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- FUNCIÓN DE HORA VENEZUELA (NUEVO) ---
+def now_vzla():
+    # Toma la hora UTC del servidor y resta 4 horas
+    return datetime.utcnow() - timedelta(hours=4)
+
 # --- 2. SISTEMA DE SEGURIDAD ---
 
 def get_manager():
@@ -90,7 +95,8 @@ def check_auth():
 
         if token_url in tokens_validos:
             st.session_state['auth_status'] = True
-            cookie_manager.set("agua_token_secure", token_url, expires_at=datetime.now() + timedelta(days=90))
+            # Usamos hora vzla para la expiración
+            cookie_manager.set("agua_token_secure", token_url, expires_at=now_vzla() + timedelta(days=90))
             st.query_params.clear() 
             st.rerun() 
             return True
@@ -117,7 +123,7 @@ def check_auth():
         if st.form_submit_button("Entrar", use_container_width=True):
             if password == st.secrets["passwords"]["main"]:
                 st.session_state['auth_status'] = True
-                cookie_manager.set("agua_token_secure", "admin_manual", expires_at=datetime.now() + timedelta(days=1))
+                cookie_manager.set("agua_token_secure", "admin_manual", expires_at=now_vzla() + timedelta(days=1))
                 st.rerun()
             else: st.error("Incorrecto")
     return False
@@ -281,8 +287,9 @@ with tab1:
                 elif es_mixto and ("Móvil" in metodo2 or "Punto" in metodo2) and len(ref2)<4: st.error("❌ Falta Referencia en Pago 2")
                 else:
                     try:
-                        hora_actual = datetime.now().strftime("%H:%M:%S")
-                        fecha_actual = datetime.now().strftime("%Y-%m-%d")
+                        # USAMOS HORA VZLA AQUÍ
+                        hora_actual = now_vzla().strftime("%H:%M:%S")
+                        fecha_actual = now_vzla().strftime("%Y-%m-%d")
                         items_txt = ", ".join(items_str)
                         if not es_mixto:
                             fila = [fecha_actual, hora_actual, items_txt, monto, "USD" if "$" in metodo or "Divisa" in metodo else "VES", metodo, ref if ref else "N/A", total_l]
@@ -298,11 +305,12 @@ with tab1:
                         if "Rerun" not in str(e): st.error(f"Error técnico: {e}")
 
 # ----------------------------------------
-# TAB 2: DIARIO (CORREGIDO)
+# TAB 2: DIARIO
 # ----------------------------------------
 with tab2:
     if st.button("🔄 Actualizar Tabla", use_container_width=True): st.cache_data.clear(); st.rerun()
-    fecha = st.date_input("Fecha", datetime.now())
+    # Fecha por defecto: HOY VZLA
+    fecha = st.date_input("Fecha", now_vzla())
     df = pd.DataFrame(datos_ventas)
     if not df.empty:
         df['Fecha'] = pd.to_datetime(df['Fecha']).dt.date; dia = df[df['Fecha'] == fecha]
@@ -310,7 +318,6 @@ with tab2:
             cstr = dia['Metodo_Pago'].astype(str)
             def suma(x): return dia[cstr.str.contains(x, case=False)]['Monto'].sum()
             
-            # --- AQUÍ ESTABA EL ERROR: AGREGAMOS LAS METRICAS FALTANTES ---
             k1, k2 = st.columns(2)
             k1.metric("Pago Móvil", f"Bs {suma('Móvil|Movil'):,.2f}")
             k2.metric("Efectivo (Bs)", f"Bs {suma('Efectivo|Bs'):,.2f}")
@@ -328,7 +335,10 @@ with tab2:
 with tab3:
     st.markdown("### 🚛 Nueva Carga")
     with st.form("cisterna"):
-        c1, c2 = st.columns(2); f = c1.date_input("Día", datetime.now()); h = c2.time_input("Hora", datetime.now())
+        c1, c2 = st.columns(2)
+        # Default VZLA time
+        f = c1.date_input("Día", now_vzla())
+        h = c2.time_input("Hora", now_vzla())
         l = st.number_input("Litros", 2000, step=100); n = st.text_input("Chofer")
         if st.form_submit_button("GUARDAR ENTRADA", use_container_width=True):
             if sheet_cargas:
@@ -353,7 +363,8 @@ with tab3:
 # ----------------------------------------
 with tab4:
     st.markdown("### 📅 Resumen Gerencial")
-    fecha_ref = st.date_input("Día Referencia:", datetime.now())
+    # Referencia VZLA
+    fecha_ref = st.date_input("Día Referencia:", now_vzla())
     inicio = fecha_ref - timedelta(days=fecha_ref.weekday())
     fin = inicio + timedelta(days=6)
     st.info(f"Semana: **{inicio.strftime('%d/%m')}** al **{fin.strftime('%d/%m')}**")
