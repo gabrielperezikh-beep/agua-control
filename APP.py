@@ -13,51 +13,77 @@ st.set_page_config(page_title="Agua Control", page_icon="logo.png", layout="wide
 # ESTILOS CSS
 st.markdown("""
 <style>
-    /* Ocultar pie de página, mostrar encabezado */
     footer {visibility: hidden;}
     header {visibility: visible;}
     
-    /* 1. ARREGLO DE ESPACIO SUPERIOR */
     .block-container { 
         max-width: 800px; 
         margin: auto; 
         padding-top: 3.5rem !important; 
     }
     
-    /* Optimización Móvil */
     [data-testid="column"] { min-width: 10px !important; padding: 0 2px !important; }
     
-    /* Tarjetas (Forms) */
-    [data-testid="stForm"] { background-color: white; border: 1px solid #e0e0e0; border-radius: 12px; padding: 10px !important; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 5px; }
+    /* ESTILO PARA LOS FORMULARIOS PRINCIPALES (Vender, Login) */
+    [data-testid="stForm"] { 
+        background-color: white; 
+        border: 1px solid #e0e0e0; 
+        border-radius: 12px; 
+        padding: 10px !important; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+        margin-bottom: 8px;
+    }
     
-    /* Botones Grandes */
-    [data-testid="stForm"] div.stButton > button { background-color: #0078D7 !important; color: white !important; border: none !important; border-radius: 8px !important; font-weight: 800 !important; width: 100% !important; height: 50px !important; margin-top: 5px !important; font-size: 16px !important; }
-    [data-testid="stForm"] div.stButton > button:active { background-color: #005a9e !important; transform: scale(0.98); }
+    /* BOTONES GIGANTES (Solo para Agregar y Confirmar) */
+    /* Apuntamos específicamente a los botones dentro de formularios para que sean grandes */
+    [data-testid="stForm"] button { 
+        background-color: #0078D7 !important; 
+        color: white !important; 
+        border: none !important; 
+        border-radius: 8px !important; 
+        font-weight: 800 !important; 
+        height: 45px !important; 
+        margin-top: 2px !important;
+    }
+    [data-testid="stForm"] button:active { 
+        background-color: #005a9e !important; 
+        transform: scale(0.98); 
+    }
+    
+    /* BOTÓN DE BORRAR (Pequeño y Rojo) */
+    /* Este estilo aplicará al botón de basura que está FUERA de un form */
+    div.stButton > button {
+        border-radius: 8px !important;
+        font-weight: bold !important;
+        border: 1px solid #ff4b4b !important; /* Borde rojo suave */
+        color: #ff4b4b !important;
+        background-color: transparent !important;
+        height: 40px !important;
+    }
+    div.stButton > button:active {
+        background-color: #ff4b4b !important;
+        color: white !important;
+    }
     
     /* Textos */
-    .product-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; font-family: sans-serif; }
-    .prod-name { font-weight: 700; font-size: 15px; color: #333; }
-    .prod-price { font-weight: 800; font-size: 16px; color: #0078D7; }
+    .prod-name { font-weight: 700; font-size: 15px; color: #333; margin-bottom: 0px;}
+    .prod-details { font-size: 13px; color: #666; }
+    .prod-price { font-weight: 800; font-size: 15px; color: #0078D7; }
     
-    /* Input de números */
     div[data-testid="stNumberInput"] input { font-size: 22px; font-weight: bold; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
 # --- 2. SISTEMA DE SEGURIDAD ---
 
-# CORRECCIÓN: Se eliminó @st.cache_resource aquí para evitar el CachedWidgetWarning
 def get_manager():
     return stx.CookieManager(key="agua_manager_secure")
 
 def check_auth():
-    # A. SI YA ESTÁ LOGUEADO EN MEMORIA
-    if st.session_state.get('auth_status', False):
-        return True
+    if st.session_state.get('auth_status', False): return True
 
     cookie_manager = get_manager()
     
-    # B. REVISAR TOKEN EN LINK
     params = st.query_params
     token_url = params.get("token", None)
 
@@ -71,10 +97,8 @@ def check_auth():
             st.query_params.clear() 
             st.rerun() 
             return True
-        else:
-            st.error("⛔ Enlace inválido."); st.stop()
+        else: st.error("⛔ Enlace inválido."); st.stop()
 
-    # C. REVISAR COOKIE
     cookies = cookie_manager.get_all()
     token_cookie = cookies.get("agua_token_secure")
     
@@ -86,7 +110,6 @@ def check_auth():
                 return True
         except: pass
 
-    # D. LOGIN MANUAL
     c1, c2, c3 = st.columns([1,2,1])
     if os.path.exists("logo.png"): 
         with c2: st.image("logo.png", use_container_width=True)
@@ -155,9 +178,8 @@ try:
 except:
     st.warning("⚠️ Reconectando..."); time.sleep(1); st.cache_data.clear(); st.rerun()
 
-# --- HEADER (ALINEADO Y VISIBLE) ---
+# --- HEADER ---
 color_st = "#D32F2F" if stock < 200 else "#0078D7"
-
 c_logo, c_title, c_logout = st.columns([1.5, 5, 1.5], vertical_alignment="center")
 
 with c_logo:
@@ -174,7 +196,6 @@ with c_logout:
         st.query_params.clear()
         st.rerun()
 
-# TARJETA STOCK GRANDE
 st.markdown(f"""
 <div style="padding:15px; background:linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%); border-radius:12px; margin-bottom:15px; margin-top:10px; border-left:5px solid {color_st}; display:flex; justify-content:space-between; align-items:center;">
     <div style="font-size:12px; color:#555; font-weight:bold;">TANQUE<br>DISPONIBLE</div>
@@ -187,7 +208,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["🛒 VENDER", "📊 DIARIO", "🚛 CISTERNA",
 
 with tab1:
     if not productos_disponibles:
-        st.warning("⚠️ Sin productos. Configure en Google Sheets.")
+        st.warning("⚠️ Sin productos.")
         if st.button("Recargar"): st.cache_data.clear(); st.rerun()
     else:
         nombres = list(productos_disponibles.keys())
@@ -206,18 +227,33 @@ with tab1:
                         if st.form_submit_button("AGREGAR", use_container_width=True): agregar_producto(p2)
 
     if st.session_state.carrito:
-        st.divider(); st.markdown("### 🛒 Pedido")
+        st.divider(); st.markdown("### 🛒 Pedido Actual")
         total_bs = 0; total_l = 0; items_str = []
         keys_carrito = list(st.session_state.carrito.keys())
+        
+        # --- CARRITO ESTILO TARJETA ---
         for p in keys_carrito:
             q = st.session_state.carrito[p]
             dat = productos_disponibles.get(p, {'precio':0, 'litros':0})
             sub = dat['precio'] * q
             total_bs += sub; total_l += dat['litros'] * q
             items_str.append(f"{q}x {p}")
-            c1, c2, c3, c4 = st.columns([3, 1, 1.5, 0.5])
-            c1.write(f"**{p.replace('Recarga','')}**"); c2.write(f"x{q}"); c3.write(f"**Bs {sub:g}**")
-            if c4.button("❌", key=f"del_{p}"): del st.session_state.carrito[p]; st.rerun()
+            
+            # Usamos container(border=True) para la caja blanca sin usar un FORM
+            with st.container(border=True):
+                # Columnas: Texto (Grande) | Botón (Pequeño)
+                col_info, col_btn = st.columns([4, 1], vertical_alignment="center")
+                
+                with col_info:
+                    st.markdown(f"<div class='prod-name'>{p.replace('Recarga','')}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='prod-details'>Cant: <b>{q}</b> &nbsp;|&nbsp; Total: <span class='prod-price'>Bs {sub:g}</span></div>", unsafe_allow_html=True)
+                
+                with col_btn:
+                    # Botón normal (fuera de form) -> Hereda el estilo rojo definido en CSS
+                    # No usamos use_container_width=True para que se mantenga pequeño y cuadrado
+                    if st.button("🗑️", key=f"del_{p}", help="Eliminar"):
+                        del st.session_state.carrito[p]
+                        st.rerun()
 
         st.markdown("---")
         with st.form("cobro_principal"):
@@ -225,17 +261,23 @@ with tab1:
             c_m, c_v = st.columns(2)
             with c_m: metodo = st.selectbox("Método", ["Pago Móvil", "Efectivo Bs", "Divisas ($)", "Punto de Venta"])
             with c_v: monto = st.number_input("Monto Recibido", value=float(total_bs))
-            ref = st.text_input("Referencia (4 dígitos)", max_chars=4)
+            ref = st.text_input("Ref (4 dígitos)", max_chars=4)
             if st.form_submit_button("✅ CONFIRMAR VENTA", use_container_width=True):
                 if ("Móvil" in metodo or "Punto" in metodo) and len(ref)<4: st.error("Falta Referencia")
                 else:
                     try:
                         fila = [datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), ", ".join(items_str), monto, "USD" if "$" in metodo or "Divisa" in metodo else "VES", metodo, ref if ref else "N/A", total_l]
-                        sheet_ventas.append_row(fila); st.cache_data.clear(); st.success("¡Venta Exitosa!"); limpiar_carrito(); time.sleep(1); st.rerun()
-                    except: st.error("Error conexión.")
+                        sheet_ventas.append_row(fila)
+                        st.cache_data.clear()
+                        st.success("¡Venta Exitosa!")
+                        limpiar_carrito()
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        if "Rerun" not in str(e): st.error("Error conexión.")
 
 with tab2:
-    if st.button("🔄 Actualizar Tabla"): st.cache_data.clear(); st.rerun()
+    if st.button("🔄 Actualizar Tabla", use_container_width=True): st.cache_data.clear(); st.rerun()
     fecha = st.date_input("Fecha", datetime.now())
     df = pd.DataFrame(datos_ventas)
     if not df.empty:
