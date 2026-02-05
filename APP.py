@@ -24,7 +24,7 @@ st.markdown("""
     
     [data-testid="column"] { min-width: 10px !important; padding: 0 2px !important; }
     
-    /* ESTILO PARA LOS FORMULARIOS PRINCIPALES (Vender, Login) */
+    /* ESTILO FORMULARIOS */
     [data-testid="stForm"] { 
         background-color: white; 
         border: 1px solid #e0e0e0; 
@@ -34,8 +34,7 @@ st.markdown("""
         margin-bottom: 8px;
     }
     
-    /* BOTONES GIGANTES (Solo para Agregar y Confirmar) */
-    /* Apuntamos específicamente a los botones dentro de formularios para que sean grandes */
+    /* BOTONES GIGANTES */
     [data-testid="stForm"] button { 
         background-color: #0078D7 !important; 
         color: white !important; 
@@ -50,12 +49,11 @@ st.markdown("""
         transform: scale(0.98); 
     }
     
-    /* BOTÓN DE BORRAR (Pequeño y Rojo) */
-    /* Este estilo aplicará al botón de basura que está FUERA de un form */
+    /* BOTÓN DE BORRAR */
     div.stButton > button {
         border-radius: 8px !important;
         font-weight: bold !important;
-        border: 1px solid #ff4b4b !important; /* Borde rojo suave */
+        border: 1px solid #ff4b4b !important;
         color: #ff4b4b !important;
         background-color: transparent !important;
         height: 40px !important;
@@ -83,7 +81,6 @@ def check_auth():
     if st.session_state.get('auth_status', False): return True
 
     cookie_manager = get_manager()
-    
     params = st.query_params
     token_url = params.get("token", None)
 
@@ -167,6 +164,7 @@ def calcular_stock(c, v):
     sal = pd.DataFrame(v)['Total_Litros'].sum() if v else 0
     return ent - sal
 
+# --- CARGA DE DATOS ---
 try:
     datos_conf, datos_cargas, datos_ventas = cargar_datos_maestros()
     productos_disponibles = procesar_precios(datos_conf)
@@ -206,6 +204,9 @@ st.markdown(f"""
 # --- PESTAÑAS ---
 tab1, tab2, tab3, tab4 = st.tabs(["🛒 VENDER", "📊 DIARIO", "🚛 CISTERNA", "📅 SEMANAL"])
 
+# ----------------------------------------
+# TAB 1: VENDER
+# ----------------------------------------
 with tab1:
     if not productos_disponibles:
         st.warning("⚠️ Sin productos.")
@@ -231,7 +232,6 @@ with tab1:
         total_bs = 0; total_l = 0; items_str = []
         keys_carrito = list(st.session_state.carrito.keys())
         
-        # --- CARRITO ESTILO TARJETA ---
         for p in keys_carrito:
             q = st.session_state.carrito[p]
             dat = productos_disponibles.get(p, {'precio':0, 'litros':0})
@@ -239,43 +239,67 @@ with tab1:
             total_bs += sub; total_l += dat['litros'] * q
             items_str.append(f"{q}x {p}")
             
-            # Usamos container(border=True) para la caja blanca sin usar un FORM
             with st.container(border=True):
-                # Columnas: Texto (Grande) | Botón (Pequeño)
                 col_info, col_btn = st.columns([4, 1], vertical_alignment="center")
-                
                 with col_info:
                     st.markdown(f"<div class='prod-name'>{p.replace('Recarga','')}</div>", unsafe_allow_html=True)
                     st.markdown(f"<div class='prod-details'>Cant: <b>{q}</b> &nbsp;|&nbsp; Total: <span class='prod-price'>Bs {sub:g}</span></div>", unsafe_allow_html=True)
-                
                 with col_btn:
-                    # Botón normal (fuera de form) -> Hereda el estilo rojo definido en CSS
-                    # No usamos use_container_width=True para que se mantenga pequeño y cuadrado
                     if st.button("🗑️", key=f"del_{p}", help="Eliminar"):
-                        del st.session_state.carrito[p]
-                        st.rerun()
+                        del st.session_state.carrito[p]; st.rerun()
 
         st.markdown("---")
+        es_mixto = st.toggle("💸 Pago Mixto (2 Métodos)")
+        
         with st.form("cobro_principal"):
-            st.markdown(f"#### Total: :blue[Bs {total_bs:,.2f}]")
-            c_m, c_v = st.columns(2)
-            with c_m: metodo = st.selectbox("Método", ["Pago Móvil", "Efectivo Bs", "Divisas ($)", "Punto de Venta"])
-            with c_v: monto = st.number_input("Monto Recibido", value=float(total_bs))
-            ref = st.text_input("Ref (4 dígitos)", max_chars=4)
+            st.markdown(f"#### Total a Pagar: :blue[Bs {total_bs:,.2f}]")
+            
+            if not es_mixto:
+                c_m, c_v = st.columns(2)
+                with c_m: metodo = st.selectbox("Método", ["Pago Móvil", "Efectivo Bs", "Divisas ($)", "Punto de Venta"])
+                with c_v: monto = st.number_input("Monto Recibido", value=float(total_bs))
+                ref = st.text_input("Ref (4 dígitos)", max_chars=4)
+            else:
+                st.info("Divide el pago en dos partes:")
+                c1a, c1b = st.columns(2)
+                with c1a: 
+                    st.caption("PAGO 1")
+                    metodo1 = st.selectbox("Método 1", ["Pago Móvil", "Punto de Venta", "Efectivo Bs", "Divisas ($)"])
+                    monto1 = st.number_input("Monto 1", value=float(total_bs), step=1.0)
+                    ref1 = st.text_input("Ref 1", max_chars=4, key="ref1")
+                with c1b:
+                    st.caption("PAGO 2")
+                    metodo2 = st.selectbox("Método 2", ["Efectivo Bs", "Divisas ($)", "Pago Móvil", "Punto de Venta"])
+                    monto2 = st.number_input("Monto 2", value=0.0, step=1.0)
+                    ref2 = st.text_input("Ref 2", max_chars=4, key="ref2")
+
             if st.form_submit_button("✅ CONFIRMAR VENTA", use_container_width=True):
-                if ("Móvil" in metodo or "Punto" in metodo) and len(ref)<4: st.error("Falta Referencia")
+                if es_mixto and abs((monto1 + monto2) - total_bs) > 0.5:
+                    st.error(f"❌ Los montos no suman {total_bs}. (Suman: {monto1 + monto2})")
+                elif not es_mixto and ("Móvil" in metodo or "Punto" in metodo) and len(ref)<4: st.error("❌ Falta Referencia")
+                elif es_mixto and ("Móvil" in metodo1 or "Punto" in metodo1) and len(ref1)<4: st.error("❌ Falta Referencia en Pago 1")
+                elif es_mixto and ("Móvil" in metodo2 or "Punto" in metodo2) and len(ref2)<4: st.error("❌ Falta Referencia en Pago 2")
                 else:
                     try:
-                        fila = [datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), ", ".join(items_str), monto, "USD" if "$" in metodo or "Divisa" in metodo else "VES", metodo, ref if ref else "N/A", total_l]
-                        sheet_ventas.append_row(fila)
-                        st.cache_data.clear()
-                        st.success("¡Venta Exitosa!")
-                        limpiar_carrito()
-                        time.sleep(1)
-                        st.rerun()
+                        hora_actual = datetime.now().strftime("%H:%M:%S")
+                        fecha_actual = datetime.now().strftime("%Y-%m-%d")
+                        items_txt = ", ".join(items_str)
+                        if not es_mixto:
+                            fila = [fecha_actual, hora_actual, items_txt, monto, "USD" if "$" in metodo or "Divisa" in metodo else "VES", metodo, ref if ref else "N/A", total_l]
+                            sheet_ventas.append_row(fila)
+                        else:
+                            fila1 = [fecha_actual, hora_actual, items_txt, monto1, "USD" if "$" in metodo1 else "VES", metodo1, ref1 if ref1 else "N/A", total_l]
+                            sheet_ventas.append_row(fila1)
+                            if monto2 > 0:
+                                fila2 = [fecha_actual, hora_actual, "Pago Mixto (Complemento)", monto2, "USD" if "$" in metodo2 else "VES", metodo2, ref2 if ref2 else "N/A", 0]
+                                sheet_ventas.append_row(fila2)
+                        st.cache_data.clear(); st.success("¡Venta Exitosa!"); limpiar_carrito(); time.sleep(1); st.rerun()
                     except Exception as e:
-                        if "Rerun" not in str(e): st.error("Error conexión.")
+                        if "Rerun" not in str(e): st.error(f"Error técnico: {e}")
 
+# ----------------------------------------
+# TAB 2: DIARIO
+# ----------------------------------------
 with tab2:
     if st.button("🔄 Actualizar Tabla", use_container_width=True): st.cache_data.clear(); st.rerun()
     fecha = st.date_input("Fecha", datetime.now())
@@ -289,8 +313,11 @@ with tab2:
             st.dataframe(dia[['Hora','Detalles_Compra','Monto','Metodo_Pago']], hide_index=True, use_container_width=True)
         else: st.info("No hay ventas hoy.")
 
+# ----------------------------------------
+# TAB 3: CISTERNA (MEJORADO)
+# ----------------------------------------
 with tab3:
-    st.markdown("### 🚛 Cisterna")
+    st.markdown("### 🚛 Nueva Carga")
     with st.form("cisterna"):
         c1, c2 = st.columns(2); f = c1.date_input("Día", datetime.now()); h = c2.time_input("Hora", datetime.now())
         l = st.number_input("Litros", 2000, step=100); n = st.text_input("Chofer")
@@ -298,13 +325,105 @@ with tab3:
             if sheet_cargas:
                 try: sheet_cargas.append_row([str(f), str(h), l, 0, n]); st.cache_data.clear(); st.success("¡Stock Actualizado!"); time.sleep(1); st.rerun()
                 except Exception as e: st.error(f"Error: {e}")
+    
+    st.divider()
+    st.markdown("### 📋 Historial de Cargas")
+    df_cargas = pd.DataFrame(datos_cargas)
+    if not df_cargas.empty:
+        # Ordenar por fecha (asumiendo formato YYYY-MM-DD o parseable)
+        try:
+            df_cargas['Fecha'] = pd.to_datetime(df_cargas['Fecha'])
+            df_cargas = df_cargas.sort_values(by=['Fecha', 'Hora'], ascending=False)
+            df_cargas['Fecha'] = df_cargas['Fecha'].dt.date # Volver a formato fecha para mostrar bonito
+        except: pass
+        st.dataframe(df_cargas, hide_index=True, use_container_width=True)
+    else:
+        st.info("No hay cargas registradas.")
 
+# ----------------------------------------
+# TAB 4: SEMANAL (GERENCIAL)
+# ----------------------------------------
 with tab4:
-    st.markdown("### 📅 Semanal")
-    fecha_ref = st.date_input("Día Referencia:", datetime.now()); inicio = fecha_ref - timedelta(days=fecha_ref.weekday()); fin = inicio + timedelta(days=6)
+    st.markdown("### 📅 Resumen Gerencial")
+    fecha_ref = st.date_input("Día Referencia:", datetime.now())
+    inicio = fecha_ref - timedelta(days=fecha_ref.weekday())
+    fin = inicio + timedelta(days=6)
     st.info(f"Semana: **{inicio.strftime('%d/%m')}** al **{fin.strftime('%d/%m')}**")
+    
     df_v = pd.DataFrame(datos_ventas)
+    df_c = pd.DataFrame(datos_cargas)
+    
     if not df_v.empty:
-        df_v['Fecha'] = pd.to_datetime(df_v['Fecha']).dt.date; mask = (df_v['Fecha'] >= inicio) & (df_v['Fecha'] <= fin); df_sem = df_v.loc[mask]
-        if not df_sem.empty: st.success(f"💧 Vendido: {df_sem['Total_Litros'].sum():,.0f} L")
-        else: st.warning("Cero ventas.")
+        # 1. FILTRAR POR SEMANA
+        df_v['Fecha'] = pd.to_datetime(df_v['Fecha']).dt.date
+        mask = (df_v['Fecha'] >= inicio) & (df_v['Fecha'] <= fin)
+        df_sem = df_v.loc[mask]
+        
+        # Filtrar cargas semanales
+        cargas_sem = 0
+        if not df_c.empty:
+            df_c['Fecha'] = pd.to_datetime(df_c['Fecha']).dt.date
+            mask_c = (df_c['Fecha'] >= inicio) & (df_c['Fecha'] <= fin)
+            cargas_sem = len(df_c.loc[mask_c])
+
+        if not df_sem.empty:
+            # 2. CALCULAR METRICAS FINANCIERAS
+            st.divider()
+            st.caption("💰 RESUMEN FINANCIERO")
+            
+            # Helper para sumar por método de pago (case insensitive)
+            def sumar_metodo(df, keyword):
+                return df[df['Metodo_Pago'].astype(str).str.contains(keyword, case=False, na=False)]['Monto'].sum()
+
+            m_movil = sumar_metodo(df_sem, 'Móvil|Movil')
+            m_efectivo = sumar_metodo(df_sem, 'Efectivo|Bs')
+            m_punto = sumar_metodo(df_sem, 'Punto')
+            m_dolar = sumar_metodo(df_sem, 'Divisa|\$')
+
+            k1, k2 = st.columns(2)
+            k1.metric("📱 Pago Móvil", f"Bs {m_movil:,.2f}")
+            k2.metric("💵 Efectivo (Bs)", f"Bs {m_efectivo:,.2f}")
+            
+            k3, k4 = st.columns(2)
+            k3.metric("💳 Punto Venta", f"Bs {m_punto:,.2f}")
+            k4.metric("🇺🇸 Divisas ($)", f"$ {m_dolar:,.2f}")
+
+            # 3. CONTEO DE PRODUCTOS (PARSING)
+            st.divider()
+            st.caption("📦 BOTELLONES VENDIDOS")
+            
+            conteo_productos = {}
+            # Recorremos cada venta para contar "2x Botellon", "1x 5L", etc.
+            for items_str in df_sem['Detalles_Compra']:
+                if pd.isna(items_str): continue
+                # Separamos por coma (ej: "2x Botellon, 1x 5L")
+                lista_items = str(items_str).split(", ")
+                for item in lista_items:
+                    try:
+                        # Buscamos separar cantidad y nombre (ej: "2x Botellon")
+                        if "x " in item:
+                            qty_str, nombre = item.split("x ", 1)
+                            # Ignoramos si es un texto de abono o saldo
+                            if "ABONO" in nombre or "SALDO" in nombre or "Complemento" in nombre: continue
+                            
+                            nombre = nombre.strip()
+                            conteo_productos[nombre] = conteo_productos.get(nombre, 0) + int(qty_str)
+                    except: pass
+            
+            # Mostrar conteo
+            if conteo_productos:
+                for prod, cant in conteo_productos.items():
+                    st.write(f"**{prod}:** {cant} unidades")
+            else:
+                st.caption("No se detectaron productos estándar.")
+
+            # 4. LITROS Y CISTERNAS
+            st.divider()
+            c_litros, c_cargas = st.columns(2)
+            c_litros.metric("💧 Litros Vendidos", f"{df_sem['Total_Litros'].sum():,.0f} L")
+            c_cargas.metric("🚛 Recargas Cisterna", f"{cargas_sem} viajes")
+
+        else:
+            st.warning("Cero ventas esta semana.")
+    else:
+        st.info("No hay datos históricos.")
