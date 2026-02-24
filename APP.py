@@ -50,12 +50,9 @@ def check_auth():
         else: st.error("⛔ Enlace inválido."); st.stop()
 
     cookies = cookie_manager.get_all()
-    
-    # 🛡️ ESCUDO ANTI-PARPADEO: Da tiempo al navegador a enviar la cookie si la app se "durmió"
     if not cookies and 'intentos_auth' not in st.session_state:
         st.session_state['intentos_auth'] = 1
-        with st.spinner("Conectando de forma segura..."):
-            time.sleep(0.5)
+        with st.spinner("Conectando de forma segura..."): time.sleep(0.5)
         st.rerun()
 
     if cookies and "agua_token_secure" in cookies:
@@ -105,17 +102,33 @@ def cargar_datos_maestros():
         except: sheet_prod = []
         try: sheet_conf = libro.worksheet("Configuracion").get_all_records()
         except: sheet_conf = []
-        return sheet_prod, sheet_conf, libro.worksheet("Cargas").get_all_records(), libro.sheet1.get_all_records()
-    except: return [], [], [], []
+        try: sheet_inv = libro.worksheet("Inventario").get_all_records()
+        except: sheet_inv = []
+        return sheet_prod, sheet_conf, libro.worksheet("Cargas").get_all_records(), libro.sheet1.get_all_records(), sheet_inv
+    except: return [], [], [], [], []
 
 def procesar_maestros(datos_prod, datos_conf):
     productos = {}
     for f in datos_prod:
         nombre = str(f.get('Producto', '')).strip()
         if not nombre: continue
+        
+        # Búsqueda inteligente de la columna SKU y Control de Stock
+        codigo = str(f.get('Código_SKU', f.get('Código (SKU)', f.get('Codigo', f.get('SKU', nombre))))).strip()
         pr = float(str(f.get('Precio_Actual', 0)).replace(',', '.'))
         l = float(str(f.get('Litros', 0)).replace(',', '.'))
-        productos[nombre] = {"precio": pr, "litros": l}
+        
+        ctrl_keys = [k for k in f.keys() if 'controla' in k.lower()]
+        controla = False
+        if ctrl_keys:
+            controla = str(f.get(ctrl_keys[0], 'NO')).strip().upper() in ['SI', 'SÍ', 'YES', 'TRUE']
+        
+        productos[nombre] = {
+            "precio": pr, 
+            "litros": l, 
+            "codigo": codigo, 
+            "controla_stock": controla
+        }
 
     tasa = 60.0
     for c in datos_conf:
@@ -132,13 +145,15 @@ def calcular_stock(c, v):
     return ent - sal
 
 try:
-    d_prod, d_conf, d_cargas, d_ventas = cargar_datos_maestros()
+    d_prod, d_conf, d_cargas, d_ventas, d_inv = cargar_datos_maestros()
     productos_disponibles, tasa_global_db = procesar_maestros(d_prod, d_conf)
     stock = calcular_stock(d_cargas, d_ventas)
     libro_actual = obtener_conexion()
     sheet_ventas = libro_actual.sheet1
     try: sheet_cargas = libro_actual.worksheet("Cargas")
     except: sheet_cargas = None
+    try: sheet_inventario = libro_actual.worksheet("Inventario")
+    except: sheet_inventario = None
 except:
     st.warning("⚠️ Reconectando..."); time.sleep(1); st.cache_data.clear(); st.rerun()
 
@@ -160,17 +175,12 @@ with c_logout:
         try:
             manager = get_manager()
             galletas = manager.get_all()
-            if galletas and "agua_token_secure" in galletas:
-                manager.delete("agua_token_secure")
-        except Exception:
-            pass
-            
+            if galletas and "agua_token_secure" in galletas: manager.delete("agua_token_secure")
+        except: pass
         keys_to_clear = ['auth_status', 'usuario', 'carrito', 'intentos_auth']
         for k in keys_to_clear:
             if k in st.session_state: del st.session_state[k]
-        st.query_params.clear()
-        time.sleep(0.5)
-        st.rerun()
+        st.query_params.clear(); time.sleep(0.5); st.rerun()
 
 def agregar_producto(nombre):
     st.session_state.carrito[nombre] = st.session_state.carrito.get(nombre, 0) + 1
@@ -198,6 +208,61 @@ st.markdown(f"""
     <div style="font-size:28px; font-weight:900; color:{color_st};">{stock:,.0f} L</div>
 </div>
 """, unsafe_allow_html=True)
+
+# ---------------- PREPARACIÓN GLOBAL DE DATOS ----------------
+df_v = pd.DataFrame(d_ventas)
+df_c = pd.DataFrame(d_cargas)
+df_i = pd.DataFrame(d_inv)
+
+if not df_v.empty and 'Monto' in df_v.columns:
+    df_v['Fecha'] = pd.to_datetime(df_v['Fecha'], errors='coerce').dt.date
+    df_v['Monto'] = pd.to_numeric(df_v['Monto'], errors='coerce').fillna(0)
+
+if not df_c.empty:
+    # TRADUCTOR DE ENCABEZADOS: Adaptamos Costo_Divisa a Costo_Bs y Notas a Concepto internamente
+    df_c.rename(columns={'Costo_Divisa': 'Costo_Bs', 'Notas': 'Concepto'}, inplace=True)
+    df_c['Fecha'] = pd.to_datetime(df_c['Fecha'], errors='coerce').dt.date
+    df_c['Litros'] = pd.to_numeric(df_c['Litros'], errors='coerce').fillna(0)
+    df_c['Costo_Bs'] = pd.to_numeric(df_c['Costo_Bs'], errors='coerce').fillna(0)
+
+# --- INVENTARIO CEREBRO (SKU MATCHER) ---
+if not df_i.empty:
+    # CORRECCIÓN VITAL: Convertir la fecha de Inventario a formato Tiempo (datetime.date)
+    df_i['Fecha'] = pd.to_datetime(df_i['Fecha'], errors='coerce').dt.date
+    
+    sku_col = next((col for col in df_i.columns if 'código' in col.lower() or 'sku' in col.lower() or 'codigo' in col.lower()), 'Item')
+    df_i.rename(columns={sku_col: 'SKU_Calc'}, inplace=True)
+    
+    df_i['Cantidad'] = pd.to_numeric(df_i['Cantidad'], errors='coerce').fillna(0)
+    df_i['Costo_Bs'] = pd.to_numeric(df_i['Costo_Bs'], errors='coerce').fillna(0)
+    df_i['Tasa_Cambio'] = pd.to_numeric(df_i['Tasa_Cambio'], errors='coerce').fillna(st.session_state.tasa_actual).replace(0, 1)
+    df_i['Costo_USD'] = df_i['Costo_Bs'] / df_i['Tasa_Cambio']
+
+# Calcular Egresos por Ventas
+ventas_por_sku = {}
+sku_tapa = None
+
+for n, data in productos_disponibles.items():
+    ventas_por_sku[data['codigo']] = 0
+    if 'tapa' in n.lower():
+        sku_tapa = data['codigo']
+
+if not df_v.empty and 'Detalles_Compra' in df_v.columns:
+    for detalle in df_v['Detalles_Compra'].dropna():
+        for item in str(detalle).split(', '):
+            if 'x ' in item and 'Vuelto' not in item:
+                try:
+                    cant, nombre_venta = item.strip().split('x ', 1)
+                    cant = int(cant)
+                    
+                    if nombre_venta in productos_disponibles:
+                        prod_data = productos_disponibles[nombre_venta]
+                        sku_vendido = prod_data['codigo']
+                        ventas_por_sku[sku_vendido] += cant
+                        
+                        if 'botellón' in nombre_venta.lower() and 'recarga' not in nombre_venta.lower():
+                            if sku_tapa: ventas_por_sku[sku_tapa] += cant
+                except: pass
 
 # ---------------- PESTAÑAS ----------------
 pestanas = ["🛒 VENDER", "📊 DIARIO", "🚛 CISTERNA", "📅 BALANCE"]
@@ -301,21 +366,6 @@ with tabs[0]:
                 except Exception as e:
                     if "Rerun" not in str(e): st.error(f"Error: {e}")
 
-# ---------------- PREPARACIÓN DE DATOS GLOBALES ----------------
-df_v = pd.DataFrame(d_ventas)
-df_c = pd.DataFrame(d_cargas)
-
-if not df_v.empty and 'Monto' in df_v.columns:
-    df_v['Fecha'] = pd.to_datetime(df_v['Fecha'], errors='coerce').dt.date
-    df_v['Monto'] = pd.to_numeric(df_v['Monto'], errors='coerce').fillna(0)
-
-if not df_c.empty:
-    if len(df_c.columns) >= 5:
-        df_c.rename(columns={df_c.columns[2]: 'Litros', df_c.columns[3]: 'Costo_Bs', df_c.columns[4]: 'Concepto'}, inplace=True)
-    df_c['Fecha'] = pd.to_datetime(df_c['Fecha'], errors='coerce').dt.date
-    df_c['Litros'] = pd.to_numeric(df_c['Litros'], errors='coerce').fillna(0)
-    df_c['Costo_Bs'] = pd.to_numeric(df_c['Costo_Bs'], errors='coerce').fillna(0)
-
 # ---------------- TAB 2: DIARIO ----------------
 with tabs[1]:
     if st.button("🔄 Actualizar", use_container_width=True): st.cache_data.clear(); st.rerun()
@@ -362,7 +412,7 @@ with tabs[2]:
         if st.form_submit_button("GUARDAR CARGA", use_container_width=True):
             if sheet_cargas is not None:
                 try: 
-                    sheet_cargas.append_row([str(f), str(h), l, costo_bs, n])
+                    sheet_cargas.append_row([str(f), str(h), l, costo_bs, n, st.session_state.tasa_actual])
                     st.cache_data.clear(); st.success("Cisterna Registrada"); time.sleep(1); st.rerun()
                 except Exception as e: st.error(f"Error: {e}")
 
@@ -397,7 +447,6 @@ with tabs[3]:
         
         cist_rango_usd = 0.0
         suel_rango_usd = 0.0
-        
         if not df_c.empty:
             df_c_rango = df_c[(df_c['Fecha'] >= f_inicio) & (df_c['Fecha'] <= f_fin)]
             if not df_c_rango.empty:
@@ -408,26 +457,22 @@ with tabs[3]:
                 cist_rango_usd = df_c_rango[mask_cisternas]['Costo_Bs'].sum() / tasa_hoy
                 suel_rango_usd = df_c_rango[mask_gastos]['Costo_Bs'].sum() / tasa_hoy
 
-        utilidad_rango = ventas_rango_usd - cist_rango_usd - suel_rango_usd
+        insumos_rango_usd = 0.0
+        if not df_i.empty:
+            df_i_rango = df_i[(df_i['Fecha'] >= f_inicio) & (df_i['Fecha'] <= f_fin)]
+            if not df_i_rango.empty:
+                insumos_rango_usd = df_i_rango['Costo_USD'].sum()
+
+        utilidad_rango = ventas_rango_usd - cist_rango_usd - suel_rango_usd - insumos_rango_usd
 
         st.markdown(f"<div style='background-color: #f8f9fa; border-left: 5px solid #0078D7; padding: 15px; border-radius: 10px; margin-bottom: 20px;'><h4>📊 Ganancia del Período ({f_inicio.strftime('%d/%m')} - {f_fin.strftime('%d/%m')})</h4></div>", unsafe_allow_html=True)
         
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Ingreso Neto (+)", f"$ {ventas_rango_usd:,.2f}", help="Ventas menos Vueltos")
+        c1.metric("Ingreso Neto (+)", f"$ {ventas_rango_usd:,.2f}")
         c2.metric("Cisternas (-)", f"$ {cist_rango_usd:,.2f}")
-        c3.metric("Sueldos/Admin (-)", f"$ {suel_rango_usd:,.2f}")
+        c3.metric("Sueldos/Insumos (-)", f"$ {(suel_rango_usd + insumos_rango_usd):,.2f}")
         c4.metric("UTILIDAD NETA", f"$ {utilidad_rango:,.2f}", delta="A Favor" if utilidad_rango>=0 else "En Contra", delta_color="normal" if utilidad_rango>=0 else "inverse")
 
-        st.divider()
-        st.caption("📦 Productos Vendidos en este rango")
-        if not df_v.empty and not df_v_rango.empty:
-            conteo = {}
-            for item in df_v_rango['Detalles_Compra']:
-                for i in str(item).split(", "):
-                    if "x " in i and "Vuelto" not in i:
-                        try: q, n = i.split("x ", 1); conteo[n.strip()] = conteo.get(n.strip(), 0) + int(q)
-                        except: pass
-            for p, c in conteo.items(): st.write(f"**{p}:** {c}")
     else:
         st.warning("Selecciona una fecha de inicio y una fecha de fin en el calendario de arriba.")
 
@@ -436,7 +481,7 @@ if len(tabs) == 5:
     with tabs[4]:
         st.header("⚙️ Centro de Control (Gerencia)")
         
-        admin_tabs = st.tabs(["🏦 Caja General", "💸 Pagar Nómina", "🏧 Depósitos", "📈 Mapa de Calor"])
+        admin_tabs = st.tabs(["🏦 Caja General", "📦 Inventario", "💸 Pagar Nómina", "🏧 Depósitos", "📈 Mapa de Calor"])
         
         # --- SUB TAB 1: CAJA ---
         with admin_tabs[0]:
@@ -450,12 +495,92 @@ if len(tabs) == 5:
                     mask_dep_tot = df_c['Concepto'].astype(str).str.contains('DEPÓSITO', case=False, na=False)
                     bs_tot_egresos = df_c[~mask_dep_tot]['Costo_Bs'].sum()
                 
-                caja_total_usd = divisa_tot + ((bs_tot_ingresos - bs_tot_egresos) / st.session_state.tasa_actual)
+                bs_tot_inventario_usd = df_i['Costo_USD'].sum() if not df_i.empty else 0.0
                 
-            st.markdown(f"<div style='background-color: #e6f7ff; border: 2px solid #0078D7; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px;'><h3>🏦 CAJA TOTAL HISTÓRICA: $ {caja_total_usd:,.2f}</h3><p style='margin:0; color:#555;'>Ganancia acumulada desde el inicio de operaciones.</p></div>", unsafe_allow_html=True)
+                caja_total_usd = divisa_tot + ((bs_tot_ingresos - bs_tot_egresos) / st.session_state.tasa_actual) - bs_tot_inventario_usd
+                
+            st.markdown(f"<div style='background-color: #e6f7ff; border: 2px solid #0078D7; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px;'><h3>🏦 CAJA TOTAL HISTÓRICA: $ {caja_total_usd:,.2f}</h3><p style='margin:0; color:#555;'>Ganancia acumulada restando gastos e insumos físicos.</p></div>", unsafe_allow_html=True)
 
-        # --- SUB TAB 2: EGRESOS Y SUELDOS ---
+        # --- SUB TAB 2: INVENTARIO INTELIGENTE ---
         with admin_tabs[1]:
+            st.subheader("📦 Gestión de Insumos y Rentabilidad")
+            
+            opciones_compra = {data['codigo']: nombre for nombre, data in productos_disponibles.items() if data['controla_stock']}
+            
+            with st.form("form_inventario"):
+                st.markdown("##### 📥 Registrar Nueva Compra")
+                
+                if opciones_compra:
+                    c1, c2 = st.columns([2, 1])
+                    sku_seleccionado = c1.selectbox("Producto Comprado", options=list(opciones_compra.keys()), format_func=lambda x: opciones_compra[x])
+                    cant_compra = c2.number_input("Cantidad Física", min_value=1, step=10)
+                    
+                    c3, c4 = st.columns(2)
+                    moneda_compra = c3.selectbox("Moneda Usada", ["Divisas ($)", "Bolívares (Bs)"])
+                    costo_compra = c4.number_input("Costo TOTAL Pagado", min_value=0.0, step=1.0)
+                    
+                    if st.form_submit_button("Guardar Compra", use_container_width=True):
+                        if sheet_inventario is not None:
+                            if costo_compra > 0:
+                                try:
+                                    h_act = now_vzla().strftime("%H:%M:%S")
+                                    f_act = now_vzla().strftime("%Y-%m-%d")
+                                    tasa_hoy = st.session_state.tasa_actual
+                                    monto_guardar_bs = costo_compra * tasa_hoy if "Divisas" in moneda_compra else costo_compra
+                                    
+                                    sheet_inventario.append_row([str(f_act), str(h_act), sku_seleccionado, cant_compra, monto_guardar_bs, tasa_hoy])
+                                    st.cache_data.clear(); st.success(f"Compra de {opciones_compra[sku_seleccionado]} registrada."); time.sleep(1); st.rerun()
+                                except Exception as e: st.error(f"Error: {e}")
+                            else: st.warning("Por favor coloca el costo total.")
+                        else: st.error("⚠️ Falla: No existe la pestaña 'Inventario' en el Excel.")
+                else:
+                    st.warning("⚠️ No hay productos marcados con 'SI' en la columna Controla_Stock en tu Excel.")
+                    st.form_submit_button("Actualizar", disabled=True)
+
+            st.divider()
+            
+            st.markdown("##### 🧮 Tablero Maestro de Rentabilidad")
+            
+            datos_maestros = []
+            for nombre, data in productos_disponibles.items():
+                if data['controla_stock']:
+                    sku = data['codigo']
+                    
+                    cant_comprada = 0
+                    costo_total_usd = 0.0
+                    if not df_i.empty and 'SKU_Calc' in df_i.columns:
+                        df_filtro = df_i[df_i['SKU_Calc'].astype(str).str.strip() == sku]
+                        cant_comprada = df_filtro['Cantidad'].sum()
+                        costo_total_usd = df_filtro['Costo_USD'].sum()
+                    
+                    cant_vendida = ventas_por_sku.get(sku, 0)
+                    stock_actual = cant_comprada - cant_vendida
+                    
+                    costo_unitario_usd = (costo_total_usd / cant_comprada) if cant_comprada > 0 else 0.0
+                    precio_venta_usd = data['precio'] / st.session_state.tasa_actual
+                    
+                    margen = "N/A"
+                    if costo_unitario_usd > 0 and precio_venta_usd > 0:
+                        margen = f"{((precio_venta_usd - costo_unitario_usd) / costo_unitario_usd) * 100:.0f}%"
+                        
+                    datos_maestros.append({
+                        "SKU": sku,
+                        "Producto": nombre,
+                        "Stock Real": stock_actual,
+                        "Costo c/u ($)": f"${costo_unitario_usd:.3f}",
+                        "Precio Venta ($)": f"${precio_venta_usd:.2f}",
+                        "Margen": margen
+                    })
+
+            if datos_maestros:
+                df_maestro = pd.DataFrame(datos_maestros)
+                st.dataframe(df_maestro, hide_index=True, use_container_width=True)
+                st.caption("💡 Costo calculado en base a las compras registradas. Margen en base al precio de venta en pizarra HOY.")
+            else:
+                st.info("Configura productos con Control de Stock en tu Excel para ver la tabla.")
+
+        # --- SUB TAB 3: EGRESOS Y SUELDOS ---
+        with admin_tabs[2]:
             st.subheader("💸 Pagar Nómina o Gasto Variable")
             st.caption("Esto restará dinero de tu Caja Histórica y bajará tu rentabilidad.")
             with st.form("form_sueldos"):
@@ -471,13 +596,13 @@ if len(tabs) == 5:
                             f_act = now_vzla().strftime("%Y-%m-%d")
                             monto_guardar_bs = monto_gasto * st.session_state.tasa_actual if "Divisas" in moneda_gasto else monto_gasto
                             if sheet_cargas is not None:
-                                sheet_cargas.append_row([str(f_act), str(h_act), 0, monto_guardar_bs, f"GASTO/NÓMINA: {concepto}"])
+                                sheet_cargas.append_row([str(f_act), str(h_act), 0, monto_guardar_bs, f"GASTO/NÓMINA: {concepto}", st.session_state.tasa_actual])
                                 st.cache_data.clear(); st.success(f"Gasto guardado."); time.sleep(1); st.rerun()
                         except Exception as e: st.error(f"Error: {e}")
                     else: st.warning("Completa el concepto y el monto.")
 
-        # --- SUB TAB 3: DEPÓSITOS BANCARIOS ---
-        with admin_tabs[2]:
+        # --- SUB TAB 4: DEPÓSITOS BANCARIOS ---
+        with admin_tabs[3]:
             st.subheader("🏧 Mover Efectivo a la Cuenta")
             st.info("💡 Registra aquí el efectivo físico que depositas en tu cuenta. Esto deja constancia del movimiento sin restar tu Ganancia Total.")
             with st.form("form_deposito"):
@@ -497,27 +622,24 @@ if len(tabs) == 5:
                             monto_guardar_bs = monto_dep * st.session_state.tasa_actual if "Divisas" in moneda_dep else monto_dep
                             
                             if sheet_cargas is not None:
-                                sheet_cargas.append_row([str(f_act), str(h_act), 0, monto_guardar_bs, f"DEPÓSITO: {tipo_entrada} (Ref: {ref_dep})"])
+                                sheet_cargas.append_row([str(f_act), str(h_act), 0, monto_guardar_bs, f"DEPÓSITO: {tipo_entrada} (Ref: {ref_dep})", st.session_state.tasa_actual])
                                 st.cache_data.clear(); st.success(f"Movimiento guardado."); time.sleep(1); st.rerun()
                         except Exception as e: st.error(f"Error: {e}")
                     else: st.warning("Coloca un monto mayor a 0.")
 
-        # --- SUB TAB 4: MAPA DE CALOR (INTERACTIVO) ---
-        with admin_tabs[3]:
+        # --- SUB TAB 5: MAPA DE CALOR ---
+        with admin_tabs[4]:
             st.subheader("📈 Horario Comercial de Ventas")
-            
             opcion_filtro = st.radio("Selecciona los datos a analizar:", ["Historial Completo", "Por Rango de Fechas"], horizontal=True)
             
             if opcion_filtro == "Por Rango de Fechas":
                 fechas_hm = st.date_input("Rango para el Mapa de Calor", 
                                        [now_vzla().date() - timedelta(days=7), now_vzla().date()], 
                                        max_value=now_vzla().date(), key="hm_dates")
-            else:
-                fechas_hm = None
+            else: fechas_hm = None
             
             if not df_v.empty and 'Hora' in df_v.columns and 'Fecha' in df_v.columns:
                 df_hm = df_v.copy()
-                
                 if fechas_hm is not None and len(fechas_hm) == 2:
                     df_hm['Fecha_Date'] = pd.to_datetime(df_hm['Fecha'], errors='coerce').dt.date
                     df_hm = df_hm[(df_hm['Fecha_Date'] >= fechas_hm[0]) & (df_hm['Fecha_Date'] <= fechas_hm[1])]
@@ -525,11 +647,9 @@ if len(tabs) == 5:
                 if not df_hm.empty:
                     df_hm['FechaDT'] = pd.to_datetime(df_hm['Fecha'].astype(str) + ' ' + df_hm['Hora'], errors='coerce')
                     df_hm = df_hm.dropna(subset=['FechaDT'])
-                    
                     if not df_hm.empty:
                         df_hm['Hora_Int'] = df_hm['FechaDT'].dt.hour
                         df_hm = df_hm[(df_hm['Hora_Int'] >= 9) & (df_hm['Hora_Int'] <= 21)]
-                        
                         if not df_hm.empty:
                             df_hm['Dia'] = df_hm['FechaDT'].dt.day_name()
                             dias_es = {'Monday':'Lunes', 'Tuesday':'Martes', 'Wednesday':'Miércoles', 'Thursday':'Jueves', 'Friday':'Viernes', 'Saturday':'Sábado', 'Sunday':'Domingo'}
@@ -541,24 +661,11 @@ if len(tabs) == 5:
                             dias_orden = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
                             horas_orden = list(range(9, 22))
                             hm_pivot = hm_pivot.reindex(index=dias_orden, columns=horas_orden, fill_value=0)
-                            
                             horas_str = [f"{h}:00" for h in horas_orden]
                             
-                            fig = px.imshow(
-                                hm_pivot, 
-                                labels=dict(x="Hora del Día", y="Día de la Semana", color="Cantidad de Ventas"),
-                                x=horas_str, 
-                                y=dias_orden, 
-                                aspect="auto", 
-                                text_auto=True, 
-                                color_continuous_scale="Blues"
-                            )
+                            fig = px.imshow(hm_pivot, labels=dict(x="Hora", y="Día", color="Ventas"), x=horas_str, y=dias_orden, aspect="auto", text_auto=True, color_continuous_scale="Blues")
                             fig.update_xaxes(side="top")
                             st.plotly_chart(fig, use_container_width=True)
-                            if opcion_filtro == "Historial Completo":
-                                st.info("💡 Este mapa te muestra el volumen histórico de ventas en todas las fechas registradas.")
-                            else:
-                                st.info(f"💡 Mapa mostrando las ventas del **{fechas_hm[0].strftime('%d/%m')} al {fechas_hm[1].strftime('%d/%m')}**.")
                         else: st.warning("No hay ventas entre las 9 AM y 9 PM para el rango seleccionado.")
                     else: st.warning("Aún no hay ventas válidas registradas en este rango.")
                 else: st.warning("No se encontraron ventas para las fechas seleccionadas.")
