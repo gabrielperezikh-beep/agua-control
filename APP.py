@@ -17,10 +17,17 @@ st.markdown("""
     header {visibility: visible;}
     .block-container { max-width: 900px; margin: auto; padding-top: 2rem !important; }
     [data-testid="column"] { min-width: 10px !important; padding: 0 2px !important; }
+    
+    /* Contenedores y Formularios */
     [data-testid="stForm"], div.stContainer { background-color: white; border: 1px solid #e0e0e0; border-radius: 12px; padding: 10px !important; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 8px; }
-    [data-testid="stForm"] button { background-color: #0078D7 !important; color: white !important; border: none !important; border-radius: 8px !important; font-weight: 800 !important; height: 50px !important; font-size: 16px !important; }
-    [data-testid="stForm"] button:active { background-color: #005a9e !important; transform: scale(0.98); }
+    
+    /* CORRECCIÓN DEL OJO DE CONTRASEÑA: Ahora solo afecta a los botones de Confirmar/Enviar, no al ojito */
+    [data-testid="stFormSubmitButton"] button { background-color: #0078D7 !important; color: white !important; border: none !important; border-radius: 8px !important; font-weight: 800 !important; height: 50px !important; font-size: 16px !important; }
+    [data-testid="stFormSubmitButton"] button:active { background-color: #005a9e !important; transform: scale(0.98); }
+    
+    /* Botones secundarios (como el de cerrar sesión o borrar del carrito) */
     div.stButton > button { border-radius: 8px !important; border: 1px solid #ff4b4b !important; color: #ff4b4b !important; background-color: transparent !important; height: 40px !important; }
+    
     .prod-name { font-weight: 700; font-size: 15px; color: #333; }
     .prod-price { font-weight: 800; font-size: 15px; color: #0078D7; }
     div[data-testid="stNumberInput"] input { font-size: 22px; font-weight: bold; text-align: center; }
@@ -219,7 +226,6 @@ if not df_v.empty and 'Monto' in df_v.columns:
     df_v['Monto'] = pd.to_numeric(df_v['Monto'], errors='coerce').fillna(0)
 
 if not df_c.empty:
-    # TRADUCTOR DE ENCABEZADOS: Adaptamos Costo_Divisa a Costo_Bs y Notas a Concepto internamente
     df_c.rename(columns={'Costo_Divisa': 'Costo_Bs', 'Notas': 'Concepto'}, inplace=True)
     df_c['Fecha'] = pd.to_datetime(df_c['Fecha'], errors='coerce').dt.date
     df_c['Litros'] = pd.to_numeric(df_c['Litros'], errors='coerce').fillna(0)
@@ -227,7 +233,6 @@ if not df_c.empty:
 
 # --- INVENTARIO CEREBRO (SKU MATCHER) ---
 if not df_i.empty:
-    # CORRECCIÓN VITAL: Convertir la fecha de Inventario a formato Tiempo (datetime.date)
     df_i['Fecha'] = pd.to_datetime(df_i['Fecha'], errors='coerce').dt.date
     
     sku_col = next((col for col in df_i.columns if 'código' in col.lower() or 'sku' in col.lower() or 'codigo' in col.lower()), 'Item')
@@ -362,7 +367,7 @@ with tabs[0]:
                             mon2 = "USD" if "$" in m2_metodo else "VES"
                             sheet_ventas.append_row([f_act, h_act, vend, "Complemento Mixto", m2_monto, mon2, ts, m2_metodo, m2_ref or "N/A", 0, "Activa"])
 
-                    st.cache_data.clear(); st.success("Venta Exitosa"); limpiar_carrito(); time.sleep(1); st.rerun()
+                    st.cache_data.clear(); st.success("Venta Exitosa"); st.session_state.carrito = {}; time.sleep(1); st.rerun()
                 except Exception as e:
                     if "Rerun" not in str(e): st.error(f"Error: {e}")
 
@@ -627,19 +632,22 @@ if len(tabs) == 5:
                         except Exception as e: st.error(f"Error: {e}")
                     else: st.warning("Coloca un monto mayor a 0.")
 
-        # --- SUB TAB 5: MAPA DE CALOR ---
+        # --- SUB TAB 5: MAPA DE CALOR (INTERACTIVO) ---
         with admin_tabs[4]:
             st.subheader("📈 Horario Comercial de Ventas")
+            
             opcion_filtro = st.radio("Selecciona los datos a analizar:", ["Historial Completo", "Por Rango de Fechas"], horizontal=True)
             
             if opcion_filtro == "Por Rango de Fechas":
                 fechas_hm = st.date_input("Rango para el Mapa de Calor", 
                                        [now_vzla().date() - timedelta(days=7), now_vzla().date()], 
                                        max_value=now_vzla().date(), key="hm_dates")
-            else: fechas_hm = None
+            else:
+                fechas_hm = None
             
             if not df_v.empty and 'Hora' in df_v.columns and 'Fecha' in df_v.columns:
                 df_hm = df_v.copy()
+                
                 if fechas_hm is not None and len(fechas_hm) == 2:
                     df_hm['Fecha_Date'] = pd.to_datetime(df_hm['Fecha'], errors='coerce').dt.date
                     df_hm = df_hm[(df_hm['Fecha_Date'] >= fechas_hm[0]) & (df_hm['Fecha_Date'] <= fechas_hm[1])]
@@ -647,9 +655,11 @@ if len(tabs) == 5:
                 if not df_hm.empty:
                     df_hm['FechaDT'] = pd.to_datetime(df_hm['Fecha'].astype(str) + ' ' + df_hm['Hora'], errors='coerce')
                     df_hm = df_hm.dropna(subset=['FechaDT'])
+                    
                     if not df_hm.empty:
                         df_hm['Hora_Int'] = df_hm['FechaDT'].dt.hour
                         df_hm = df_hm[(df_hm['Hora_Int'] >= 9) & (df_hm['Hora_Int'] <= 21)]
+                        
                         if not df_hm.empty:
                             df_hm['Dia'] = df_hm['FechaDT'].dt.day_name()
                             dias_es = {'Monday':'Lunes', 'Tuesday':'Martes', 'Wednesday':'Miércoles', 'Thursday':'Jueves', 'Friday':'Viernes', 'Saturday':'Sábado', 'Sunday':'Domingo'}
@@ -661,9 +671,18 @@ if len(tabs) == 5:
                             dias_orden = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
                             horas_orden = list(range(9, 22))
                             hm_pivot = hm_pivot.reindex(index=dias_orden, columns=horas_orden, fill_value=0)
+                            
                             horas_str = [f"{h}:00" for h in horas_orden]
                             
-                            fig = px.imshow(hm_pivot, labels=dict(x="Hora", y="Día", color="Ventas"), x=horas_str, y=dias_orden, aspect="auto", text_auto=True, color_continuous_scale="Blues")
+                            fig = px.imshow(
+                                hm_pivot, 
+                                labels=dict(x="Hora del Día", y="Día de la Semana", color="Cantidad de Ventas"),
+                                x=horas_str, 
+                                y=dias_orden, 
+                                aspect="auto", 
+                                text_auto=True, 
+                                color_continuous_scale="Blues"
+                            )
                             fig.update_xaxes(side="top")
                             st.plotly_chart(fig, use_container_width=True)
                         else: st.warning("No hay ventas entre las 9 AM y 9 PM para el rango seleccionado.")
