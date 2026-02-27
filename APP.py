@@ -485,6 +485,27 @@ with tabs[3]:
         c3.metric("Sueldos/Insumos (-)", f"$ {(suel_rango_usd + insumos_rango_usd):,.2f}")
         c4.metric("UTILIDAD NETA", f"$ {utilidad_rango:,.2f}", delta="A Favor" if utilidad_rango>=0 else "En Contra", delta_color="normal" if utilidad_rango>=0 else "inverse")
 
+        # --- RECUPERADO: CONTEO DE PRODUCTOS ---
+        st.divider()
+        st.markdown("#### 📦 Resumen de Productos Vendidos")
+        
+        if not df_v.empty and not df_v_rango.empty:
+            conteo = {}
+            for item in df_v_rango['Detalles_Compra'].dropna():
+                for i in str(item).split(", "):
+                    if "x " in i and "Vuelto" not in i:
+                        try: 
+                            q, n = i.split("x ", 1)
+                            conteo[n.strip()] = conteo.get(n.strip(), 0) + int(q)
+                        except: pass
+            
+            if conteo:
+                # Lo convertimos en una tabla ordenada de mayor a menor ventas
+                df_conteo = pd.DataFrame(list(conteo.items()), columns=['Producto', 'Cantidad Vendida']).sort_values(by='Cantidad Vendida', ascending=False)
+                st.dataframe(df_conteo, hide_index=True, use_container_width=True)
+            else:
+                st.info("No hay productos detallados en este rango.")
+
     else:
         st.warning("Selecciona una fecha de inicio y una fecha de fin en el calendario de arriba.")
 
