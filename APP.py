@@ -741,7 +741,7 @@ if len(tabs) == 5:
                         except Exception as e: st.error(f"Error: {e}")
                     else: st.warning("Coloca un monto mayor a 0.")
 
-        # --- SUB TAB 5: MAPA DE CALOR (INTERACTIVO) ---
+# --- SUB TAB 5: MAPA DE CALOR (INTERACTIVO) ---
         with admin_tabs[4]:
             st.subheader("📈 Horario Comercial de Ventas")
             
@@ -794,6 +794,33 @@ if len(tabs) == 5:
                             )
                             fig.update_xaxes(side="top")
                             st.plotly_chart(fig, use_container_width=True)
+                            
+                            # --- NUEVO: RESUMEN DE TRÁFICO DEBAJO DEL MAPA ---
+                            st.divider()
+                            st.markdown("#### ⏱️ Resumen de Tráfico (Frecuencia de Clientes)")
+                            
+                            # Agrupar solo por hora (para ver la tendencia general del día)
+                            resumen_horas = df_hm.groupby('Hora_Int').size().reindex(horas_orden, fill_value=0).reset_index(name='Total_Ventas')
+                            
+                            idx_max = resumen_horas['Total_Ventas'].idxmax()
+                            idx_min = resumen_horas['Total_Ventas'].idxmin()
+                            
+                            h_pico = int(resumen_horas.loc[idx_max, 'Hora_Int'])
+                            v_pico = int(resumen_horas.loc[idx_max, 'Total_Ventas'])
+                            
+                            h_valle = int(resumen_horas.loc[idx_min, 'Hora_Int'])
+                            v_valle = int(resumen_horas.loc[idx_min, 'Total_Ventas'])
+                            
+                            def formato_hora(h):
+                                ampm = "AM" if h < 12 else "PM"
+                                h_12 = h if h <= 12 else h - 12
+                                if h_12 == 0: h_12 = 12
+                                return f"{h_12}:00 {ampm}"
+                            
+                            c1, c2 = st.columns(2)
+                            c1.success(f"🔥 **Mayor Tráfico:** {formato_hora(h_pico)}\n\nEs la hora general más ocupada, acumulando **{v_pico} transacciones** en el período seleccionado. Ideal para tener full personal y stock a la mano.")
+                            c2.warning(f"🧊 **Menor Tráfico:** {formato_hora(h_valle)}\n\nEs la hora más suave, con solo **{v_valle} transacciones**. Buen momento para limpiar, hacer inventario físico o recibir a los proveedores.")
+                            
                         else: st.warning("No hay ventas entre las 9 AM y 9 PM para el rango seleccionado.")
                     else: st.warning("Aún no hay ventas válidas registradas en este rango.")
                 else: st.warning("No se encontraron ventas para las fechas seleccionadas.")
