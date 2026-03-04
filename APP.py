@@ -277,12 +277,11 @@ if not df_v.empty and 'Detalles_Compra' in df_v.columns:
 # MENÚ HAMBURGUESA (SIDEBAR)
 # =====================================================================
 with st.sidebar:
-    # Opciones por defecto para los usuarios normales
     opciones_menu = ["🛒 VENDER", "📊 DIARIO", "🚛 CISTERNA", "📅 BALANCE", "⚙️ CONFIGURACIÓN"]
     
-    # Opciones extra y Beta solo para el Administrador
+    # Opciones exclusivas de Administrador
     if st.session_state.get('usuario', '').lower() == "admin":
-        opciones_menu.insert(1, "📒 POR ENTREGAR") # Lo oculta a los demás
+        opciones_menu.insert(1, "📒 POR ENTREGAR") # Oculto para los demás
         opciones_menu.extend(["🏦 CAJA GENERAL", "📦 INVENTARIO", "💸 NÓMINA", "🏧 DEPÓSITOS", "📈 MAPA DE CALOR"])
     
     seleccion = st.radio("Navegación", opciones_menu, label_visibility="collapsed")
@@ -343,10 +342,13 @@ def modal_cobro(total_bs, total_l, items_str, cant_recarga_20l, sheet_ventas, c_
     
     metodo = st.radio("Selecciona Método de Pago:", ["Punto de Venta", "Efectivo", "Pago Móvil", "Mixto", "Divisa"], horizontal=True)
     
-    retiro_despues = st.checkbox("📦 El cliente retira después (Pago por Adelantado)", value=False)
+    # Ocultar la opción de "Por Entregar" si no es Admin
+    retiro_despues = False
     nombre_cliente = ""
-    if retiro_despues:
-        nombre_cliente = st.text_input("👤 Nombre del Cliente (Obligatorio para guardar)")
+    if st.session_state.get('usuario', '').lower() == "admin":
+        retiro_despues = st.checkbox("📦 El cliente retira después (Pago por Adelantado)", value=False)
+        if retiro_despues:
+            nombre_cliente = st.text_input("👤 Nombre del Cliente (Obligatorio para guardar)")
 
     tasa = st.session_state.tasa_actual
     es_combo_2x1 = (cant_recarga_20l == 2 and len(items_str) == 1)
