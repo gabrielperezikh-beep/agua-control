@@ -63,7 +63,7 @@ st.markdown("""
     .info-bar { font-size: 12px; color: #666; background: #f0f2f6; padding: 5px 10px; border-radius: 5px; display: flex; justify-content: space-between; margin-bottom: 10px; margin-top: 10px; }
     div[role="radiogroup"] label { font-size: 18px !important; font-weight: 900 !important; color: #111 !important; }
 
-    /* LOGOS Y RESPONSIVIDAD GENERAL (Ajusta el logo para que nunca desborde) */
+    /* LOGOS Y RESPONSIVIDAD GENERAL */
     div[data-testid="stImage"] img { 
         max-width: 100% !important; 
         height: auto !important; 
@@ -100,13 +100,12 @@ def now_vzla(): return datetime.utcnow() - timedelta(hours=4)
 def get_manager(): return stx.CookieManager(key="agua_manager_secure")
 
 def check_auth():
-    # FILTRO ESTRICTO: Si tiene pase verde PERO perdió el nombre, lo obligamos a re-leer
     if st.session_state.auth_status and st.session_state.usuario != "Anon": 
         return True
         
     cookie_manager = get_manager()
     
-    # LECTOR DE ENLACES (Ej: ?token=yanelis)
+    # LECTOR DE ENLACES
     if "token" in st.query_params or "u" in st.query_params:
         url_token = st.query_params.get("token", st.query_params.get("u", ""))
         try:
@@ -118,9 +117,9 @@ def check_auth():
                 time.sleep(0.5)
                 st.rerun()
         except Exception:
-            pass # Pasa silencioso si hay error en secretos
+            pass 
 
-    # LECTOR DE COOKIES (Si ya había entrado antes)
+    # LECTOR DE COOKIES
     cookies = cookie_manager.get_all()
     if not cookies and 'intentos_auth' not in st.session_state:
         st.session_state['intentos_auth'] = 1
@@ -136,7 +135,7 @@ def check_auth():
                 return True
         except: pass
 
-    # FORMULARIO MANUAL
+    # FORMULARIO MANUAL MULTI-USUARIO
     c1, c2, c3 = st.columns([1,2,1])
     try:
         l_path = os.path.join(CARPETA_LOCAL, "logo.png")
@@ -146,15 +145,24 @@ def check_auth():
     
     st.markdown("### 🔒 Acceso")
     with st.form("login_manual"):
-        pwd = st.text_input("Clave Maestra", type="password")
+        pwd = st.text_input("Clave de Acceso", type="password")
         if st.form_submit_button("Entrar", use_container_width=True):
             try:
-                if pwd == st.secrets["passwords"]["main"]:
+                passwords_dict = dict(st.secrets["passwords"])
+                usuario_logeado = None
+                
+                for nombre_usuario, clave_guardada in passwords_dict.items():
+                    if pwd == clave_guardada:
+                        usuario_logeado = "Admin" if nombre_usuario == "main" else nombre_usuario.capitalize()
+                        break
+                
+                if usuario_logeado:
                     st.session_state.auth_status = True
-                    st.session_state.usuario = "Admin"
-                    cookie_manager.set("agua_token_secure", "admin_manual", expires_at=now_vzla() + timedelta(days=1))
+                    st.session_state.usuario = usuario_logeado
+                    cookie_manager.set("agua_token_secure", usuario_logeado, expires_at=now_vzla() + timedelta(days=30))
                     st.rerun()
-                else: st.error("Clave incorrecta")
+                else: 
+                    st.error("❌ Clave incorrecta")
             except Exception:
                 st.error("Error leyendo secretos. Verifica Streamlit Cloud.")
     return False
@@ -269,8 +277,12 @@ if not df_v.empty and 'Detalles_Compra' in df_v.columns:
 # MENÚ HAMBURGUESA (SIDEBAR)
 # =====================================================================
 with st.sidebar:
-    opciones_menu = ["🛒 VENDER", "📒 POR ENTREGAR", "📊 DIARIO", "🚛 CISTERNA", "📅 BALANCE", "⚙️ CONFIGURACIÓN"]
+    # Opciones por defecto para los usuarios normales
+    opciones_menu = ["🛒 VENDER", "📊 DIARIO", "🚛 CISTERNA", "📅 BALANCE", "⚙️ CONFIGURACIÓN"]
+    
+    # Opciones extra y Beta solo para el Administrador
     if st.session_state.get('usuario', '').lower() == "admin":
+        opciones_menu.insert(1, "📒 POR ENTREGAR") # Lo oculta a los demás
         opciones_menu.extend(["🏦 CAJA GENERAL", "📦 INVENTARIO", "💸 NÓMINA", "🏧 DEPÓSITOS", "📈 MAPA DE CALOR"])
     
     seleccion = st.radio("Navegación", opciones_menu, label_visibility="collapsed")
