@@ -12,7 +12,6 @@ import streamlit.components.v1 as components
 # --- 1. CONFIGURACIÓN E IDENTIDAD ---
 st.set_page_config(page_title="Agua Control", page_icon="💧", layout="wide", initial_sidebar_state="expanded")
 
-# Ruta absoluta para asegurar que Streamlit Cloud encuentre la carpeta
 try:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     CARPETA_LOCAL = os.path.join(BASE_DIR, "image")
@@ -30,7 +29,7 @@ if 'auth_status' not in st.session_state: st.session_state.auth_status = False
 if 'usuario' not in st.session_state: st.session_state.usuario = "Anon"
 
 # =====================================================================
-# MOTOR JAVASCRIPT: ACTIVA EL CARRUSEL EN EL TELÉFONO
+# MOTOR JAVASCRIPT: ACTIVA EL CARRUSEL
 # =====================================================================
 components.html("""
 <script>
@@ -54,7 +53,6 @@ st.markdown("""
     header {visibility: visible;}
     .block-container { max-width: 1000px; margin: auto; padding-top: 1rem !important; }
     
-    /* CAJAS Y BOTONES GLOBALES */
     [data-testid="stForm"], div.stContainer { background-color: white; border: 1px solid #e0e0e0; border-radius: 12px; padding: 10px !important; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 8px; }
     [data-testid="stFormSubmitButton"] button { background-color: #0078D7 !important; color: white !important; border: none !important; border-radius: 8px !important; font-weight: 800 !important; height: 50px !important; font-size: 16px !important; }
     [data-testid="stFormSubmitButton"] button:active { background-color: #005a9e !important; transform: scale(0.98); }
@@ -63,29 +61,16 @@ st.markdown("""
     .info-bar { font-size: 12px; color: #666; background: #f0f2f6; padding: 5px 10px; border-radius: 5px; display: flex; justify-content: space-between; margin-bottom: 10px; margin-top: 10px; }
     div[role="radiogroup"] label { font-size: 18px !important; font-weight: 900 !important; color: #111 !important; }
 
-    /* LOGOS Y RESPONSIVIDAD GENERAL */
-    div[data-testid="stImage"] img { 
-        max-width: 100% !important; 
-        height: auto !important; 
-        margin: 0 auto; 
-        display: block; 
-    }
+    div[data-testid="stImage"] img { max-width: 100% !important; height: auto !important; margin: 0 auto; display: block; }
 
-    /* ESTÉTICA EXCLUSIVA DE TARJETAS DE PRODUCTOS */
     .titulo-prod { font-size: 14px !important; font-weight: 800; text-align: center; line-height: 1.1; margin-top: -5px !important; height: 32px; overflow: hidden; }
     .precio-prod { font-size: 13px !important; color: #0078D7; font-weight: 900; text-align: center; margin-bottom: 5px; }
     
-    .carrusel-item div[data-testid="stImage"] img { 
-        height: 95px !important; 
-        width: auto !important;
-        object-fit: contain !important; 
-    }
+    .carrusel-item div[data-testid="stImage"] img { height: 95px !important; width: auto !important; object-fit: contain !important; }
 
-    /* PÍLDORA DEL CARRITO NATIVA */
     div[data-testid="stNumberInput"] > div > div[data-baseweb="input"] { background-color: #f2f4f7 !important; border-radius: 20px !important; border: none !important; height: 38px !important; }
     div[data-testid="stNumberInput"] input { text-align: center !important; font-weight: 900 !important; font-size: 18px !important; color: #333 !important; }
 
-    /* CSS EXCLUSIVO PARA QUE EL TELÉFONO TENGA CARRUSEL */
     @media (max-width: 767px) {
         .carrusel-movil { flex-wrap: nowrap !important; overflow-x: auto !important; padding-bottom: 15px !important; scroll-snap-type: x mandatory; }
         .carrusel-item { min-width: 145px !important; max-width: 145px !important; scroll-snap-align: center; }
@@ -96,7 +81,7 @@ st.markdown("""
 
 def now_vzla(): return datetime.utcnow() - timedelta(hours=4)
 
-# --- 2. SISTEMA DE SEGURIDAD BLINDADO ---
+# --- 2. SISTEMA DE SEGURIDAD ---
 def get_manager(): return stx.CookieManager(key="agua_manager_secure")
 
 def check_auth():
@@ -105,7 +90,6 @@ def check_auth():
         
     cookie_manager = get_manager()
     
-    # LECTOR DE ENLACES
     if "token" in st.query_params or "u" in st.query_params:
         url_token = st.query_params.get("token", st.query_params.get("u", ""))
         try:
@@ -116,10 +100,8 @@ def check_auth():
                 st.query_params.clear()
                 time.sleep(0.5)
                 st.rerun()
-        except Exception:
-            pass 
+        except Exception: pass 
 
-    # LECTOR DE COOKIES
     cookies = cookie_manager.get_all()
     if not cookies and 'intentos_auth' not in st.session_state:
         st.session_state['intentos_auth'] = 1
@@ -135,7 +117,6 @@ def check_auth():
                 return True
         except: pass
 
-    # FORMULARIO MANUAL MULTI-USUARIO
     c1, c2, c3 = st.columns([1,2,1])
     try:
         l_path = os.path.join(CARPETA_LOCAL, "logo.png")
@@ -150,7 +131,6 @@ def check_auth():
             try:
                 passwords_dict = dict(st.secrets["passwords"])
                 usuario_logeado = None
-                
                 for nombre_usuario, clave_guardada in passwords_dict.items():
                     if pwd == clave_guardada:
                         usuario_logeado = "Admin" if nombre_usuario == "main" else nombre_usuario.capitalize()
@@ -161,15 +141,14 @@ def check_auth():
                     st.session_state.usuario = usuario_logeado
                     cookie_manager.set("agua_token_secure", usuario_logeado, expires_at=now_vzla() + timedelta(days=30))
                     st.rerun()
-                else: 
-                    st.error("❌ Clave incorrecta")
+                else: st.error("❌ Clave incorrecta")
             except Exception:
                 st.error("Error leyendo secretos. Verifica Streamlit Cloud.")
     return False
 
 if not check_auth(): st.stop()
 
-# --- 3. CONEXIÓN A DATOS ---
+# --- 3. CONEXIÓN A DATOS OPTIMIZADA ---
 @st.cache_resource
 def obtener_conexion():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -213,7 +192,8 @@ def calcular_stock(c, v):
     if not df_ventas.empty and 'Total_Litros' in df_ventas.columns:
         if len(df_ventas.columns) >= 11: 
             estado_col = df_ventas.columns[10]
-            mask = df_ventas[estado_col].astype(str).str.strip().str.upper() != 'PENDIENTE'
+            # Excluimos del gasto de agua los Pendientes y los ANULADOS
+            mask = ~df_ventas[estado_col].astype(str).str.contains('PENDIENTE|ANULADA', case=False, na=False)
             sal = pd.to_numeric(df_ventas.loc[mask, 'Total_Litros'], errors='coerce').sum()
         else:
             sal = pd.to_numeric(df_ventas['Total_Litros'], errors='coerce').sum()
@@ -223,31 +203,35 @@ try:
     d_prod, d_conf, d_cargas, d_ventas, d_inv = cargar_datos_maestros()
     productos_disponibles, tasa_global_db = procesar_maestros(d_prod, d_conf)
     stock = calcular_stock(d_cargas, d_ventas)
-    libro_actual = obtener_conexion()
-    sheet_ventas = libro_actual.sheet1
-    sheet_cargas = libro_actual.worksheet("Cargas") if "Cargas" in [ws.title for ws in libro_actual.worksheets()] else None
-    sheet_inventario = libro_actual.worksheet("Inventario") if "Inventario" in [ws.title for ws in libro_actual.worksheets()] else None
 except Exception as e:
     st.error(f"🚨 Error crítico de conexión: {e}")
-    st.info("Revisa que los secretos estén bien configurados en Streamlit Cloud.")
+    st.info("Revisa que los secretos estén bien configurados o espera 1 minuto a que se libere la cuota.")
     st.stop()
 
 st.session_state.tasa_actual = max(tasa_global_db, 1.0) 
 
-# --- LÓGICA DE INVENTARIO CEREBRO ---
-df_v = pd.DataFrame(d_ventas)
-df_c = pd.DataFrame(d_cargas)
-df_i = pd.DataFrame(d_inv)
-
-if not df_v.empty and 'Monto' in df_v.columns:
+# --- LÓGICA DE INVENTARIO Y FILTRO GLOBAL DE ANULACIONES ---
+df_v_bruto = pd.DataFrame(d_ventas)
+if not df_v_bruto.empty and 'Monto' in df_v_bruto.columns:
+    if len(df_v_bruto.columns) >= 11:
+        # Filtro mágico: Si dice "ANULADA", la borramos de la memoria temporal para que no sume en ningún reporte
+        estado_col = df_v_bruto.columns[10]
+        df_v = df_v_bruto[~df_v_bruto[estado_col].astype(str).str.contains('ANULADA', case=False, na=False)].copy()
+    else:
+        df_v = df_v_bruto.copy()
+        
     df_v['FechaDT'] = pd.to_datetime(df_v['Fecha'], errors='coerce') 
     df_v['Monto'] = pd.to_numeric(df_v['Monto'], errors='coerce').fillna(0)
+else:
+    df_v = pd.DataFrame()
 
+df_c = pd.DataFrame(d_cargas)
 if not df_c.empty:
     df_c.rename(columns={'Costo_Divisa': 'Costo_Bs', 'Notas': 'Concepto'}, inplace=True)
     df_c['FechaDT'] = pd.to_datetime(df_c['Fecha'], errors='coerce')
     df_c['Costo_Bs'] = pd.to_numeric(df_c['Costo_Bs'], errors='coerce').fillna(0)
 
+df_i = pd.DataFrame(d_inv)
 if not df_i.empty:
     sku_col = next((col for col in df_i.columns if 'código' in col.lower() or 'sku' in col.lower() or 'codigo' in col.lower()), 'Item')
     df_i.rename(columns={sku_col: 'SKU_Calc'}, inplace=True)
@@ -279,20 +263,16 @@ if not df_v.empty and 'Detalles_Compra' in df_v.columns:
 with st.sidebar:
     opciones_menu = ["🛒 VENDER", "📊 DIARIO", "🚛 CISTERNA", "📅 BALANCE", "⚙️ CONFIGURACIÓN"]
     
-    # Opciones exclusivas de Administrador
     if st.session_state.get('usuario', '').lower() == "admin":
-        opciones_menu.insert(1, "📒 POR ENTREGAR") # Oculto para los demás
+        opciones_menu.insert(1, "📒 POR ENTREGAR")
+        opciones_menu.insert(2, "🎛️ PANEL ADMIN") # Pestaña secreta de pruebas
         opciones_menu.extend(["🏦 CAJA GENERAL", "📦 INVENTARIO", "💸 NÓMINA", "🏧 DEPÓSITOS", "📈 MAPA DE CALOR"])
     
     seleccion = st.radio("Navegación", opciones_menu, label_visibility="collapsed")
-    
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     st.divider()
-    if st.button("🔄 Actualizar Datos", use_container_width=True):
-        st.cache_data.clear(); st.rerun()
-    if st.button("🔓 Cerrar Sesión", use_container_width=True):
-        get_manager().delete("agua_token_secure")
-        st.session_state.clear(); st.query_params.clear(); time.sleep(0.5); st.rerun()
+    if st.button("🔄 Actualizar Datos", use_container_width=True): st.cache_data.clear(); st.rerun()
+    if st.button("🔓 Cerrar Sesión", use_container_width=True): get_manager().delete("agua_token_secure"); st.session_state.clear(); st.query_params.clear(); time.sleep(0.5); st.rerun()
 
 # =====================================================================
 # LOGO Y FRANJA GENERAL
@@ -308,7 +288,7 @@ ts = st.session_state.tasa_actual
 st.markdown(f"""<div class="info-bar"><span>👤 <b>{vend}</b></span><span>💵 Tasa: <b>{ts} Bs/$</b></span></div>""", unsafe_allow_html=True)
 
 # =====================================================================
-# FUNCIONES REUTILIZABLES
+# FUNCIONES DE VENTAS Y COBRO
 # =====================================================================
 def notificar_carrito(producto_nombre):
     st.toast(f"🛒 ¡**{producto_nombre}** actualizado en el pedido!", icon="✅")
@@ -328,13 +308,10 @@ def dibujar_tarjeta(p_name, info, c_key):
         st.markdown(f"<div class='titulo-prod'>{p_name}</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='precio-prod'>Bs {info['precio']:g}</div>", unsafe_allow_html=True)
         
-        st.session_state.carrito[p_name] = st.number_input(
-            "Cant", min_value=0, step=1, key=f"pos_{p_name}_{c_key}", 
-            label_visibility="collapsed", on_change=notificar_carrito, args=(p_name,)
-        )
+        st.session_state.carrito[p_name] = st.number_input("Cant", min_value=0, step=1, key=f"pos_{p_name}_{c_key}", label_visibility="collapsed", on_change=notificar_carrito, args=(p_name,))
 
 @st.dialog("💳 Finalizar Cobro")
-def modal_cobro(total_bs, total_l, items_str, cant_recarga_20l, sheet_ventas, c_key):
+def modal_cobro(total_bs, total_l, items_str, cant_recarga_20l, c_key):
     resumen_html = "<br>".join(items_str)
     st.markdown(f"<h3 style='text-align:center; color:#0078D7; margin-top:0; margin-bottom:10px;'>{resumen_html}</h3>", unsafe_allow_html=True)
     st.markdown("<hr style='margin-top: 0; margin-bottom: 15px;'>", unsafe_allow_html=True)
@@ -342,18 +319,25 @@ def modal_cobro(total_bs, total_l, items_str, cant_recarga_20l, sheet_ventas, c_
     
     metodo = st.radio("Selecciona Método de Pago:", ["Punto de Venta", "Efectivo", "Pago Móvil", "Mixto", "Divisa"], horizontal=True)
     
-    # Ocultar la opción de "Por Entregar" si no es Admin
     retiro_despues = False
     nombre_cliente = ""
+    pendientes = {}
+    
     if st.session_state.get('usuario', '').lower() == "admin":
-        retiro_despues = st.checkbox("📦 El cliente retira después (Pago por Adelantado)", value=False)
+        st.divider()
+        retiro_despues = st.checkbox("📦 El cliente no se lleva todo hoy (Pago por Adelantado)", value=False)
         if retiro_despues:
-            nombre_cliente = st.text_input("👤 Nombre del Cliente (Obligatorio para guardar)")
+            nombre_cliente = st.text_input("👤 Nombre del Cliente (Obligatorio para guardar su pedido)")
+            st.markdown("<span style='color:#666; font-size:14px;'>Ajusta cuántos artículos de este ticket se quedarán PENDIENTES por entregar:</span>", unsafe_allow_html=True)
+            
+            for line in items_str:
+                q_str, p_name = line.split("x ", 1)
+                q_total = int(q_str)
+                pendientes[p_name] = st.number_input(f"Pendientes de '{p_name}':", min_value=0, max_value=q_total, value=q_total, step=None, key=f"pend_{p_name}")
 
     tasa = st.session_state.tasa_actual
-    es_combo_2x1 = (cant_recarga_20l == 2 and len(items_str) == 1)
     default_monto = 0.00 if metodo == "Divisa" else float(total_bs)
-    if es_combo_2x1 and metodo == "Divisa": default_monto = 1.00
+    if (cant_recarga_20l == 2 and len(items_str) == 1) and metodo == "Divisa": default_monto = 1.00
 
     with st.form("cobro_final"):
         st.markdown("""<style>
@@ -381,33 +365,75 @@ def modal_cobro(total_bs, total_l, items_str, cant_recarga_20l, sheet_ventas, c_
         st.markdown("""<style>div.stButton > button[kind="primary"] { background-color: #28a745 !important; color: white !important; height: 50px !important; font-size: 18px !important; }</style>""", unsafe_allow_html=True)
         
         if st.form_submit_button("✅ REGISTRAR VENTA", use_container_width=True):
-            if retiro_despues and not nombre_cliente.strip():
-                st.error("⚠️ Debes escribir el nombre del cliente para dejar el pedido por entregar.")
+            total_pendientes = sum(pendientes.values()) if retiro_despues else 0
+            
+            if retiro_despues and total_pendientes > 0 and not nombre_cliente.strip():
+                st.error("⚠️ Escribe el nombre del cliente para dejar la entrega en pendiente.")
+            elif retiro_despues and total_pendientes == 0:
+                st.error("⚠️ Debes indicar al menos 1 producto pendiente, o desmarcar la casilla de arriba.")
             elif metodo in ["Punto de Venta", "Pago Móvil"] and not ref.strip(): st.error("⚠️ Referencia obligatoria.")
-            elif metodo == "Mixto" and ((m1_met in ["Punto de Venta", "Pago Móvil"] and not m1_ref.strip()) or (m2_met in ["Punto de Venta", "Pago Móvil"] and not m2_ref.strip())): st.error("⚠️ Falta referencia en el método electrónico.")
+            elif metodo == "Mixto" and ((m1_met in ["Punto de Venta", "Pago Móvil"] and not m1_ref.strip()) or (m2_met in ["Punto de Venta", "Pago Móvil"] and not m2_ref.strip())): st.error("⚠️ Falta referencia.")
             else:
                 try:
+                    sheet_ventas_lazy = obtener_conexion().sheet1
                     f_act = now_vzla().strftime("%Y-%m-%d"); h_act = now_vzla().strftime("%H:%M:%S")
                     vend_actual = st.session_state.get('usuario', 'Admin'); ts = st.session_state.tasa_actual
                     
-                    estado_venta = "Pendiente" if retiro_despues else "Activa"
-                    txt_final = f"{', '.join(items_str)} (Cliente: {nombre_cliente})" if retiro_despues else ", ".join(items_str)
-                    
-                    if metodo != "Mixto":
-                        mon = "USD" if "Divisa" in metodo else "VES"
-                        sheet_ventas.append_row([f_act, h_act, vend_actual, txt_final, monto, mon, ts, metodo, ref or "N/A", total_l, estado_venta])
-                        if vuelto > 0: sheet_ventas.append_row([f_act, h_act, vend_actual, f"Vuelto ({txt_final})", -vuelto, "VES", ts, "Efectivo", "Salida Caja", 0, "Activa"])
+                    if retiro_despues and total_pendientes > 0:
+                        items_hoy, items_pend = [], []
+                        litros_hoy, litros_pend = 0, 0
+                        for line in items_str:
+                            q_str, p_name = line.split("x ", 1)
+                            q_total, q_pend = int(q_str), pendientes.get(p_name, 0)
+                            q_hoy = q_total - q_pend
+                            l_prod = productos_disponibles[p_name]['litros']
+                            if q_hoy > 0: items_hoy.append(f"{q_hoy}x {p_name}"); litros_hoy += (q_hoy * l_prod)
+                            if q_pend > 0: items_pend.append(f"{q_pend}x {p_name}"); litros_pend += (q_pend * l_prod)
+                        
+                        if not items_hoy:
+                            txt_pend = f"{', '.join(items_pend)} (Cliente: {nombre_cliente})"
+                            if metodo != "Mixto":
+                                mon = "USD" if "Divisa" in metodo else "VES"
+                                sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, txt_pend, monto, mon, ts, metodo, ref or "N/A", litros_pend, "Pendiente"])
+                                if vuelto > 0: sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, f"Vuelto ({txt_pend})", -vuelto, "VES", ts, "Efectivo", "Salida Caja", 0, "Activa"])
+                            else:
+                                m1_mon_usd = "USD" if "Divisa" in m1_met else "VES"
+                                sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, txt_pend, m1_mon, m1_mon_usd, ts, m1_met, m1_ref or "N/A", litros_pend, "Pendiente"])
+                                if m2_mon > 0: 
+                                    m2_mon_usd = "USD" if "Divisa" in m2_met else "VES"
+                                    sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, "Complemento Mixto", m2_mon, m2_mon_usd, ts, m2_met, m2_ref or "N/A", 0, "Pendiente"])
+                        else:
+                            txt_hoy = f"{', '.join(items_hoy)} (Cobro incl. Pendientes)"
+                            txt_pend = f"{', '.join(items_pend)} (Cliente: {nombre_cliente})"
+                            if metodo != "Mixto":
+                                mon = "USD" if "Divisa" in metodo else "VES"
+                                sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, txt_hoy, monto, mon, ts, metodo, ref or "N/A", litros_hoy, "Activa"])
+                                sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, txt_pend, 0, mon, ts, "Adelantado", "N/A", litros_pend, "Pendiente"])
+                                if vuelto > 0: sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, f"Vuelto ({txt_hoy})", -vuelto, "VES", ts, "Efectivo", "Salida Caja", 0, "Activa"])
+                            else:
+                                m1_mon_usd = "USD" if "Divisa" in m1_met else "VES"
+                                sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, txt_hoy, m1_mon, m1_mon_usd, ts, m1_met, m1_ref or "N/A", litros_hoy, "Activa"])
+                                sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, txt_pend, 0, m1_mon_usd, ts, "Adelantado", "N/A", litros_pend, "Pendiente"])
+                                if m2_mon > 0: 
+                                    m2_mon_usd = "USD" if "Divisa" in m2_met else "VES"
+                                    sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, "Complemento Mixto", m2_mon, m2_mon_usd, ts, m2_met, m2_ref or "N/A", 0, "Activa"])
                     else:
-                        m1_mon_usd = "USD" if "Divisa" in m1_met else "VES"
-                        sheet_ventas.append_row([f_act, h_act, vend_actual, txt_final, m1_mon, m1_mon_usd, ts, m1_met, m1_ref or "N/A", total_l, estado_venta])
-                        if m2_mon > 0: 
-                            m2_mon_usd = "USD" if "Divisa" in m2_met else "VES"
-                            sheet_ventas.append_row([f_act, h_act, vend_actual, "Complemento Mixto", m2_mon, m2_mon_usd, ts, m2_met, m2_ref or "N/A", 0, estado_venta])
+                        txt_final = ", ".join(items_str)
+                        if metodo != "Mixto":
+                            mon = "USD" if "Divisa" in metodo else "VES"
+                            sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, txt_final, monto, mon, ts, metodo, ref or "N/A", total_l, "Activa"])
+                            if vuelto > 0: sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, f"Vuelto ({txt_final})", -vuelto, "VES", ts, "Efectivo", "Salida Caja", 0, "Activa"])
+                        else:
+                            m1_mon_usd = "USD" if "Divisa" in m1_met else "VES"
+                            sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, txt_final, m1_mon, m1_mon_usd, ts, m1_met, m1_ref or "N/A", total_l, "Activa"])
+                            if m2_mon > 0: 
+                                m2_mon_usd = "USD" if "Divisa" in m2_met else "VES"
+                                sheet_ventas_lazy.append_row([f_act, h_act, vend_actual, "Complemento Mixto", m2_mon, m2_mon_usd, ts, m2_met, m2_ref or "N/A", 0, "Activa"])
                     
                     st.cache_data.clear(); st.session_state.cart_counter += 1 
                     st.success("✅ Venta exitosa")
                     time.sleep(1); st.rerun() 
-                except Exception as e: st.error(f"Error: {e}")
+                except Exception as e: st.error(f"Error guardando venta: {e}")
 
 # =====================================================================
 # SECCIONES DEL SISTEMA
@@ -418,7 +444,7 @@ if seleccion == "🛒 VENDER":
         nueva_tasa = st.number_input("Tasa Actual (Bs/$)", value=st.session_state.tasa_actual, step=0.1, key="global_tasa")
         if st.button("💾 Guardar Tasa"):
             try:
-                ws_conf = libro_actual.worksheet("Configuracion")
+                ws_conf = obtener_conexion().worksheet("Configuracion")
                 cell = ws_conf.find("TASA_DIA")
                 if cell: ws_conf.update_cell(cell.row, cell.col + 1, nueva_tasa)
                 else: ws_conf.append_row(["TASA_DIA", nueva_tasa])
@@ -478,11 +504,103 @@ if seleccion == "🛒 VENDER":
 
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("💳 CONTINUAR AL COBRO", type="primary", use_container_width=True):
-                modal_cobro(total_bs, total_l, items_str, cant_recarga_20l, sheet_ventas, c_key)
+                modal_cobro(total_bs, total_l, items_str, cant_recarga_20l, c_key)
+
+elif seleccion == "🎛️ PANEL ADMIN":
+    st.header("🎛️ Panel de Pruebas (Beta)")
+    st.info("Estas funciones están ocultas para el resto del equipo. Son exclusivas para el Administrador.")
+
+    tab1, tab2, tab3 = st.tabs(["⚖️ Calibrar Tanque", "❌ Anular Venta", "🔐 Cierre Ciego"])
+
+    with tab1:
+        st.subheader("⚖️ Calibración Rápida del Tanque")
+        st.write("Usa esto si el tanque físico tiene una cantidad diferente al sistema (ej. por gasto del pico de enjuague).")
+        st.metric("Litros según el Sistema:", f"{stock:,.0f} L")
+        nuevo_litros = st.number_input("¿Cuántos litros hay FÍSICAMENTE medidos en este momento?", min_value=0.0, value=float(stock), step=10.0)
+        
+        if st.button("Aplicar Ajuste de Calibración", type="primary"):
+            diferencia = nuevo_litros - stock
+            if diferencia != 0:
+                try:
+                    ws_cargas = obtener_conexion().worksheet("Cargas")
+                    f_act = now_vzla().strftime("%Y-%m-%d"); h_act = now_vzla().strftime("%H:%M:%S")
+                    motivo = "AJUSTE/CALIBRACIÓN: Sobrante detectado" if diferencia > 0 else "MERMA/CALIBRACIÓN: Faltante de agua"
+                    ws_cargas.append_row([f_act, h_act, diferencia, 0, motivo, st.session_state.tasa_actual])
+                    st.success(f"✅ Ajuste de {diferencia:,.0f} L aplicado con éxito en la base de datos.")
+                    st.cache_data.clear(); time.sleep(1); st.rerun()
+                except Exception as e: st.error(e)
+            else:
+                st.warning("⚠️ No hay diferencia para ajustar.")
+
+    with tab2:
+        st.subheader("❌ Anulación Lógica de Venta")
+        st.write("Selecciona una venta de las últimas 48 horas para anular. El dinero se restará y el agua volverá al tanque automáticamente.")
+        
+        if not df_v.empty and 'FechaDT' in df_v.columns:
+            # Filtramos solo ventas de los ultimos 2 dias
+            df_recientes = df_v[df_v['FechaDT'].dt.date >= (now_vzla().date() - timedelta(days=2))]
+            if not df_recientes.empty:
+                opciones_anular = {}
+                for idx, row in df_recientes.iterrows():
+                    txt_opcion = f"{row['Fecha']} {row['Hora']} | {row['Detalles_Compra']} | Bs {row['Monto']} ({row['Metodo_Pago']})"
+                    opciones_anular[idx] = txt_opcion
+                
+                venta_a_anular = st.selectbox("Venta a eliminar:", options=list(opciones_anular.keys()), format_func=lambda x: opciones_anular[x])
+                motivo = st.text_input("Escribe el motivo de la anulación (Ej: Error de cobro, Cliente devolvió):")
+                
+                if st.button("🚨 ANULAR VENTA DEFINITIVAMENTE", type="primary"):
+                    if not motivo.strip(): st.error("⚠️ Debes justificar el motivo de la anulación.")
+                    else:
+                        try:
+                            ws_v = obtener_conexion().sheet1
+                            # idx + 2 porque el indice del dataframe empieza en 0 y la primera fila es el titulo de las columnas
+                            ws_v.update_cell(venta_a_anular + 2, 11, f"ANULADA: {motivo}")
+                            st.success("✅ Venta anulada exitosamente.")
+                            st.cache_data.clear(); time.sleep(1); st.rerun()
+                        except Exception as e: st.error(e)
+            else:
+                st.info("No hay ventas activas en las últimas 48 horas.")
+
+    with tab3:
+        st.subheader("🔐 Simulador de Cierre de Caja")
+        st.write("Escribe el dinero FÍSICO que contaste en la gaveta y el monto total del comprobante del Punto de Venta.")
+        
+        c1, c2, c3 = st.columns(3)
+        conteo_bs = c1.number_input("💵 Efectivo en Bs (Gaveta)", min_value=0.0, step=10.0)
+        conteo_usd = c2.number_input("💵 Efectivo en $ (Gaveta)", min_value=0.0, step=1.0)
+        conteo_punto = c3.number_input("💳 Cierre del Punto Venta", min_value=0.0, step=10.0)
+        
+        if st.button("🔍 Auditar Caja", use_container_width=True):
+            f_dia = now_vzla().date()
+            dia = df_v[df_v['FechaDT'].dt.date == f_dia] if not df_v.empty and 'FechaDT' in df_v.columns else pd.DataFrame()
+            
+            sis_bs = sis_usd = sis_punto = 0.0
+            if not dia.empty:
+                def s_metodo(txt): return dia[dia['Metodo_Pago'].astype(str).str.contains(txt, case=False, na=False)]['Monto'].sum()
+                sis_bs = s_metodo('Efectivo|Bs')
+                sis_usd = s_metodo('Divisa|\$')
+                sis_punto = s_metodo('Punto')
+                
+            dif_bs = conteo_bs - sis_bs
+            dif_usd = conteo_usd - sis_usd
+            dif_punto = conteo_punto - sis_punto
+            
+            st.divider()
+            st.markdown("### 🧾 Resultados del Cierre (Solo visualización por ahora)")
+            
+            def formato_dif(dif, moneda):
+                if dif == 0: return f"<span style='color:green; font-weight:bold;'>✅ Cuadre Perfecto</span>"
+                elif dif > 0: return f"<span style='color:blue; font-weight:bold;'>⬆️ SOBRAN {moneda} {dif:,.2f}</span>"
+                else: return f"<span style='color:red; font-weight:bold;'>⬇️ FALTAN {moneda} {abs(dif):,.2f}</span>"
+                
+            k1, k2, k3 = st.columns(3)
+            k1.markdown(f"**Efectivo Bs**<br>Sistema: Bs {sis_bs:,.2f}<br>Caja: Bs {conteo_bs:,.2f}<br>{formato_dif(dif_bs, 'Bs')}", unsafe_allow_html=True)
+            k2.markdown(f"**Efectivo USD**<br>Sistema: $ {sis_usd:,.2f}<br>Caja: $ {conteo_usd:,.2f}<br>{formato_dif(dif_usd, '$')}", unsafe_allow_html=True)
+            k3.markdown(f"**Punto de Venta**<br>Sistema: Bs {sis_punto:,.2f}<br>Reporte: Bs {conteo_punto:,.2f}<br>{formato_dif(dif_punto, 'Bs')}", unsafe_allow_html=True)
 
 elif seleccion == "📒 POR ENTREGAR":
     st.header("📒 Entregas Pendientes")
-    st.info("Aquí aparecen los pagos que se hicieron por adelantado. Al presionar 'Entregar', se descontará el agua del tanque.")
+    st.info("Aquí aparecen los pagos por adelantado. Al presionar 'Entregar', se descuentan los litros pendientes del tanque.")
     
     @st.fragment
     def frag_pendientes():
@@ -497,7 +615,8 @@ elif seleccion == "📒 POR ENTREGAR":
                         c1.markdown(f"**{row.get('Detalles_Compra', 'Pedido')}**<br><span style='color:#888; font-size:12px;'>Fecha: {row.get('Fecha', '')} | Hora: {row.get('Hora', '')}</span>", unsafe_allow_html=True)
                         if c2.button("✅ Entregar", key=f"entregar_{idx}", use_container_width=True):
                             try:
-                                sheet_ventas.update_cell(idx + 2, 11, "Entregada")
+                                ws = obtener_conexion().sheet1
+                                ws.update_cell(idx + 2, 11, "Entregada")
                                 st.success("¡Entrega registrada con éxito!")
                                 st.cache_data.clear(); time.sleep(1); st.rerun()
                             except Exception as e:
@@ -521,16 +640,36 @@ elif seleccion == "📊 DIARIO":
         if not df_v.empty and 'FechaDT' in df_v.columns:
             dia = df_v[df_v['FechaDT'].dt.date == f_dia]
             if not dia.empty:
-                def suma_cond(metodo_txt): return dia[dia['Metodo_Pago'].astype(str).str.contains(metodo_txt, case=False, na=False)]['Monto'].sum()
-                movil = suma_cond('Móvil|Movil'); efectivo = suma_cond('Efectivo|Bs'); punto = suma_cond('Punto'); divisa = suma_cond('Divisa|\$')
+                def stats_metodo(metodo_txt):
+                    df_m = dia[dia['Metodo_Pago'].astype(str).str.contains(metodo_txt, case=False, na=False)]
+                    suma = df_m['Monto'].sum()
+                    conteo = len(df_m[~df_m['Detalles_Compra'].astype(str).str.contains('Vuelto', case=False, na=False)])
+                    return suma, conteo
+
+                movil_sum, movil_cnt = stats_metodo('Móvil|Movil')
+                efectivo_sum, efectivo_cnt = stats_metodo('Efectivo|Bs')
+                punto_sum, punto_cnt = stats_metodo('Punto')
+                divisa_sum, divisa_cnt = stats_metodo('Divisa|\$')
+                
                 mask_bs_dia = ~dia['Metodo_Pago'].str.contains('Divisa|\$', case=False, na=False)
                 total_bs_convertidos = dia.loc[mask_bs_dia, 'Monto'].sum() / st.session_state.tasa_actual
-                gran_total_usd = divisa + total_bs_convertidos
+                gran_total_usd = divisa_sum + total_bs_convertidos
                 
-                k1, k2, k3 = st.columns(3)
-                k1.metric("Pago Móvil", f"Bs {movil:,.2f}"); k2.metric("Efectivo Neto", f"Bs {efectivo:,.2f}"); k3.metric("Divisas ($)", f"$ {divisa:,.2f}")
-                st.markdown("---"); c1, c2 = st.columns(2)
-                c1.metric("Punto Venta", f"Bs {punto:,.2f}"); c2.metric("💰 Ventas Netas del Día (Aprox $)", f"$ {gran_total_usd:,.2f}")
+                mask_transacciones_reales = ~dia['Detalles_Compra'].astype(str).str.contains('Complemento Mixto|Vuelto', case=False, na=False)
+                num_transacciones = len(dia[mask_transacciones_reales])
+                
+                st.markdown(f"""
+                <div style='background-color: #e6f7ff; border: 2px solid #0078D7; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px;'>
+                    <h2 style='margin:0; color: #0078D7;'>💰 Total Ventas: $ {gran_total_usd:,.2f}</h2>
+                    <h4 style='margin:0; color: #555; padding-top: 5px;'>📝 Número de Transacciones (Clientes): {num_transacciones}</h4>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                k1, k2, k3, k4 = st.columns(4)
+                k1.metric(f"📱 Pago Móvil ({movil_cnt} trans.)", f"Bs {movil_sum:,.2f}")
+                k2.metric(f"💵 Efectivo Neto ({efectivo_cnt} trans.)", f"Bs {efectivo_sum:,.2f}")
+                k3.metric(f"💵 Divisas ({divisa_cnt} trans.)", f"$ {divisa_sum:,.2f}")
+                k4.metric(f"💳 Punto ({punto_cnt} trans.)", f"Bs {punto_sum:,.2f}")
                 
                 st.divider(); st.markdown(f"#### 📦 Resumen de Productos")
                 conteo_dia = {}
@@ -555,9 +694,11 @@ elif seleccion == "🚛 CISTERNA":
             costo_bs = st.number_input("Costo Pagado (Bs)", min_value=0.0, step=1.0)
             n = st.text_input("Chofer / Proveedor")
             if st.form_submit_button("GUARDAR CARGA", use_container_width=True):
-                if sheet_cargas is not None:
-                    sheet_cargas.append_row([str(f), str(h), l, costo_bs, n, st.session_state.tasa_actual])
+                try:
+                    ws = obtener_conexion().worksheet("Cargas")
+                    ws.append_row([str(f), str(h), l, costo_bs, n, st.session_state.tasa_actual])
                     st.cache_data.clear(); st.rerun()
+                except Exception as e: st.error(f"Error: {e}")
         if not df_c.empty:
             df_cisternas = df_c[~df_c['Concepto'].astype(str).str.contains('GASTO/NÓMINA|DEPÓSITO', case=False, na=False)]
             if not df_cisternas.empty: st.dataframe(df_cisternas.sort_values(by=['Fecha'], ascending=False)[['Fecha', 'Litros', 'Costo_Bs', 'Concepto']], hide_index=True, use_container_width=True)
@@ -680,11 +821,13 @@ elif seleccion == "📦 INVENTARIO":
                 moneda_compra = c3.selectbox("Moneda Usada", ["Divisas ($)", "Bolívares (Bs)"])
                 costo_compra = c4.number_input("Costo TOTAL Pagado", min_value=0.0, step=1.0)
                 if st.form_submit_button("Guardar Compra", use_container_width=True):
-                    if sheet_inventario is not None and costo_compra > 0:
+                    try:
+                        ws = obtener_conexion().worksheet("Inventario")
                         h_act = now_vzla().strftime("%H:%M:%S"); f_act = now_vzla().strftime("%Y-%m-%d"); tasa_hoy = st.session_state.tasa_actual
                         monto_guardar_bs = costo_compra * tasa_hoy if "Divisas" in moneda_compra else costo_compra
-                        sheet_inventario.append_row([str(f_act), str(h_act), sku_seleccionado, cant_compra, monto_guardar_bs, st.session_state.tasa_actual])
+                        ws.append_row([str(f_act), str(h_act), sku_seleccionado, cant_compra, monto_guardar_bs, st.session_state.tasa_actual])
                         st.cache_data.clear(); st.rerun()
+                    except Exception as e: st.error(f"Error: {e}")
             else: st.warning("⚠️ No hay productos marcados con 'SI' en Controla_Stock.")
         
         st.divider(); st.markdown("##### 🧮 Tablero Maestro de Rentabilidad")
@@ -714,10 +857,12 @@ elif seleccion == "💸 NÓMINA":
             moneda_gasto = c2.selectbox("Moneda Usada", ["Divisas ($)", "Bolívares (Bs)"])
             monto_gasto = c3.number_input("Monto Numérico", min_value=0.0, step=1.0)
             if st.form_submit_button("REGISTRAR GASTO", use_container_width=True) and monto_gasto > 0:
-                monto_guardar_bs = monto_gasto * st.session_state.tasa_actual if "Divisas" in moneda_gasto else monto_gasto
-                if sheet_cargas is not None:
-                    sheet_cargas.append_row([now_vzla().strftime("%Y-%m-%d"), now_vzla().strftime("%H:%M:%S"), 0, monto_guardar_bs, f"GASTO/NÓMINA: {concepto}", st.session_state.tasa_actual])
+                try:
+                    ws = obtener_conexion().worksheet("Cargas")
+                    monto_guardar_bs = monto_gasto * st.session_state.tasa_actual if "Divisas" in moneda_gasto else monto_gasto
+                    ws.append_row([now_vzla().strftime("%Y-%m-%d"), now_vzla().strftime("%H:%M:%S"), 0, monto_guardar_bs, f"GASTO/NÓMINA: {concepto}", st.session_state.tasa_actual])
                     st.cache_data.clear(); st.rerun()
+                except Exception as e: st.error(f"Error: {e}")
     frag_nom()
 
 elif seleccion == "🏧 DEPÓSITOS":
@@ -732,10 +877,12 @@ elif seleccion == "🏧 DEPÓSITOS":
             moneda_dep = c3.selectbox("Moneda Física", ["Efectivo Bs", "Divisas ($)"])
             monto_dep = c4.number_input("Monto Depositado", min_value=0.0, step=1.0)
             if st.form_submit_button("REGISTRAR MOVIMIENTO", use_container_width=True) and monto_dep > 0:
-                monto_guardar_bs = monto_dep * st.session_state.tasa_actual if "Divisas" in moneda_dep else monto_dep
-                if sheet_cargas is not None:
-                    sheet_cargas.append_row([now_vzla().strftime("%Y-%m-%d"), now_vzla().strftime("%H:%M:%S"), 0, monto_guardar_bs, f"DEPÓSITO: {tipo_entrada} (Ref: {ref_dep})", st.session_state.tasa_actual])
+                try:
+                    ws = obtener_conexion().worksheet("Cargas")
+                    monto_guardar_bs = monto_dep * st.session_state.tasa_actual if "Divisas" in moneda_dep else monto_dep
+                    ws.append_row([now_vzla().strftime("%Y-%m-%d"), now_vzla().strftime("%H:%M:%S"), 0, monto_guardar_bs, f"DEPÓSITO: {tipo_entrada} (Ref: {ref_dep})", st.session_state.tasa_actual])
                     st.cache_data.clear(); st.rerun()
+                except Exception as e: st.error(f"Error: {e}")
     frag_dep()
 
 elif seleccion == "📈 MAPA DE CALOR":
